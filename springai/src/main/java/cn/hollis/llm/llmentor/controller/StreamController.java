@@ -19,19 +19,29 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.concurrent.Executors;
 
+/**
+ * 流式输出控制器demo
+ * 演示三种不同的服务端推送技术：SSE、StreamingResponseBody、WebFlux
+ */
 @RestController
 @RequestMapping("/stream")
 public class StreamController {
 
-    private static final String API_KEY = "sk-8ef405c4686e456e91f6698272253126";// 记得改成你自己的
+    /** DashScope API Key */
+    private static final String API_KEY = "sk-18a5bc975dec45a5aaf484a48b7e600a";
+    /** DashScope 兼容模式的 Chat Completions 接口地址 */
     private static final String API_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
 
+    /**
+     * 模拟流式请求（实际返回非流式响应）
+     * 向 DashScope API 发送流式请求，但由于使用 HttpClient 同步方式，响应为完整 JSON
+     * @return API 返回的完整响应体
+     */
     @RequestMapping("/fakeStream")
     public String fakeStream() {
-
         String requestBody = """
                 {
-                    "model": "qwen-plus",
+                    "model": "glm-4.7",
                     "messages": [
                         {
                             "role": "system",
@@ -39,7 +49,7 @@ public class StreamController {
                         },
                         {
                             "role": "user",
-                            "content": "你好，介绍下JAVA？"
+                            "content": "你是什么模型"
                         }
                     ],
                     "stream": true
@@ -57,19 +67,21 @@ public class StreamController {
 
         HttpResponse<String> response = null;
         try {
-            response = client.send(
-                    request, HttpResponse.BodyHandlers.ofString());
+            response = client.send(request, HttpResponse.BodyHandlers.ofString());
         } catch (IOException e) {
             throw new RuntimeException(e);
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
 
-
         return response.body();
     }
 
-
+    /**
+     * SSE（Server-Sent Events）流式输出示例
+     * 使用 Spring 的 SseEmitter 推送服务端事件
+     * @return SseEmitter 实例，超时时间为 60 秒
+     */
     @GetMapping("/sse")
     public SseEmitter sse() {
         SseEmitter emitter = new SseEmitter(60_000L);
@@ -88,6 +100,11 @@ public class StreamController {
         return emitter;
     }
 
+    /**
+     * StreamingResponseBody 流式输出示例
+     * 直接向响应流写入数据，适合自定义流式协议
+     * @return ResponseEntity，包含 StreamingResponseBody 和 SSE 内容类型头
+     */
     @GetMapping("/entity")
     public ResponseEntity<StreamingResponseBody> chat() {
 
@@ -109,7 +126,11 @@ public class StreamController {
                 .body(body);
     }
 
-
+    /**
+     * WebFlux 响应式流式输出示例
+     * 使用 Project Reactor 的 Flux 实现真正的响应式流
+     * @return 包含字符串消息的 Flux，每秒发射一条
+     */
     @GetMapping(value = "/flux")
     public Flux<String> fluxStream() {
         return Flux.interval(Duration.ofSeconds(1))

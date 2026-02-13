@@ -8,6 +8,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Flux;
 
+//需要本地部署Ollama，这里不需要
+@Deprecated
 @RestController
 @RequestMapping("/ollama")
 public class OllamaController {

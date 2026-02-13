@@ -6,10 +6,10 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 
+//http调用模型请求demo
 public class HttpClientCaller {
 
-    // 记得改成你自己的
-    private static final String API_KEY = "sk-8ef405c4686e456e91f6698272253126";
+    private static final String API_KEY = "sk-18a5bc975dec45a5aaf484a48b7e600a";
     private static final String API_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
 
     public static void main(String[] args) throws IOException, InterruptedException {

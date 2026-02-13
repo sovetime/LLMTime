@@ -2,12 +2,15 @@ spring:
   application:
     name: LLMentor_SpringAI
   ai:
-    ollama:
-      base-url: http://localhost:11434
-      chat:
-        model: deepseek-r1:7b
+#    ollama:
+#      base-url: http://localhost:11434
+#      chat:
+#        model: deepseek-r1:7b
     dashscope:
       api-key: @dashscope.api.key@
+      chat:
+        options:
+          model: glm-4.7
     chat:
       memory:
         repository:
@@ -15,7 +18,7 @@ spring:
             platform: mysql
             initialization-mode: ALWAYS
   datasource:
-    url: jdbc:mysql://localhost:3307/spring_ai_db2?useUnicode=true&characterEncoding=UTF-8  # 记得改成你自己的
+    url: jdbc:mysql://localhost:3307/spring_ai_db2?useUnicode=true&characterEncoding=UTF-8
     username: root
     password: 123456
     driver-class-name: com.mysql.cj.jdbc.Driver
