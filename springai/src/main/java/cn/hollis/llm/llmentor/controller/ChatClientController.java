@@ -16,7 +16,7 @@ import reactor.core.publisher.Flux;
 
 /**
  * ChatClient 控制器
- * 演示 Spring AI ChatClient 的多种调用方式
+ * Spring AI ChatClient demo
  */
 @RestController
 @RequestMapping("/client")

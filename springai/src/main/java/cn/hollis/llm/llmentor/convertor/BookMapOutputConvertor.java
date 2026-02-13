@@ -5,6 +5,7 @@ import org.springframework.ai.converter.MapOutputConverter;
 import java.util.Map;
 
 public class BookMapOutputConvertor<T> extends MapOutputConverter {
+
     private T t;
 
     public BookMapOutputConvertor(T t) {

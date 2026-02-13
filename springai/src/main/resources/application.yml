@@ -16,9 +16,9 @@ spring:
         repository:
           jdbc:
             platform: mysql
-            initialization-mode: ALWAYS
+            initialize-schema: always
   datasource:
-    url: jdbc:mysql://localhost:3307/spring_ai_db2?useUnicode=true&characterEncoding=UTF-8
+    url: jdbc:mysql://localhost:3307/spring_ai?useUnicode=true&characterEncoding=UTF-8
     username: root
     password: 123456
     driver-class-name: com.mysql.cj.jdbc.Driver

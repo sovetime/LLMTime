@@ -20,11 +20,17 @@ public class PromptEngineerController implements InitializingBean {
 
     private ChatClient chatClient;
 
+    /**
+     * 角色扮演示例 - 使用默认毒舌博主角色回复用户
+     */
     @GetMapping("/role")
     public String role(String message) {
         return chatClient.prompt(message).call().content();
     }
 
+    /**
+     * 少样本提示示例 - 提供改写策略和示例，让模型学习输出格式
+     */
     @GetMapping("/shot")
     public String shot(String message) {
         return chatClient.prompt().system("""
@@ -42,11 +48,17 @@ public class PromptEngineerController implements InitializingBean {
                 """).user(message).call().content();
     }
 
+    /**
+     * 结构化输出示例 - 要求模型以JSON格式返回结果
+     */
     @GetMapping("/structureOutput")
     public String structureOutput(String message){
         return chatClient.prompt("请你以json格式输出内容").system("你是一个有用的助手").user(message).call().content();
     }
 
+    /**
+     * 思维链示例 - 逐步思考后输出结构化结果（流式返回）
+     */
     @GetMapping("/step")
     public Flux<String> step(@RequestParam(value = "message") String message, HttpServletResponse response) {
         response.setCharacterEncoding("UTF-8");

@@ -23,6 +23,10 @@ import reactor.core.publisher.Flux;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * ChatMemory 控制器
+ * 展示 Spring AI 中三种对话记忆管理方式
+ */
 @RestController
 @RequestMapping("/memory")
 public class ChatMemoryController implements InitializingBean {
@@ -32,6 +36,10 @@ public class ChatMemoryController implements InitializingBean {
 
     private ChatClient chatClient;
 
+    /**
+     * 手动维护消息列表的多轮对话
+     * 需要开发者自行将 AI 回复添加到消息列表中
+     */
     @GetMapping("/call")
     public String call(String message) {
 
@@ -65,6 +73,10 @@ public class ChatMemoryController implements InitializingBean {
         return dashScopeChatModel.call(prompt).getResult().getOutput().getText();
     }
 
+    /**
+     * 模拟对话历史
+     * 在代码中直接写死对话历史，适用于测试场景
+     */
     @GetMapping("/call1")
     public String call1(String message) {
 
@@ -85,6 +97,10 @@ public class ChatMemoryController implements InitializingBean {
     }
 
 
+    /**
+     * 使用 ChatMemory 自动管理会话历史
+     * 支持多会话，通过 chatId 区分不同会话
+     */
     @GetMapping("/callConversation")
     public Flux<String> callConversation(String message, String chatId, HttpServletResponse httpServletResponse) {
         httpServletResponse.setCharacterEncoding("UTF-8");
@@ -100,8 +116,6 @@ public class ChatMemoryController implements InitializingBean {
 
     @Override
     public void afterPropertiesSet() throws Exception {
-//        ChatMemory chatMemory = MessageWindowChatMemory.builder().maxMessages(3).build();
-
         this.chatClient = ChatClient.builder(dashScopeChatModel)
                 // 实现 Logger 的 Advisor
                 .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build(),new SimpleLoggerAdvisor())

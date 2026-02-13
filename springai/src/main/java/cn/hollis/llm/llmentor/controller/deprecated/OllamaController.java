@@ -1,4 +1,4 @@
-package cn.hollis.llm.llmentor.controller;
+package cn.hollis.llm.llmentor.controller.deprecated;
 
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.ai.ollama.OllamaChatModel;

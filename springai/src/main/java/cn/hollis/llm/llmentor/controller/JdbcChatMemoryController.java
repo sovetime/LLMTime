@@ -39,9 +39,8 @@ public class JdbcChatMemoryController implements InitializingBean {
     @Override
     public void afterPropertiesSet() throws Exception {
         this.chatClient = ChatClient.builder(dashScopeChatModel)
-                // 实现 Logger 的 Advisor
                 .defaultAdvisors(MessageChatMemoryAdvisor.builder(jdbcChatMemory).build(), new SimpleLoggerAdvisor())
-                // 设置 ChatClient 中 ChatModel 的 Options 参数
+                //额外参数，模型名称、温度、最大生成token、top-k等等
                 .defaultOptions(
                         DashScopeChatOptions.builder()
                                 .withTopP(0.7)

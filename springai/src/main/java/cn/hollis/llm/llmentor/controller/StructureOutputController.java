@@ -26,9 +26,12 @@ public class StructureOutputController implements InitializingBean {
 
     private ChatClient chatClient;
 
+    /**
+     * 使用 BeanOutputConverter 手动转换响应为POJO
+     */
     @RequestMapping("/call")
     public String call() {
-        PromptTemplate promptTemplate = PromptTemplate.builder().template("请给我推荐几本心理学有关的书，输出格式：{format}").build();
+        PromptTemplate promptTemplate = PromptTemplate.builder().template("请给我推荐一本心理学有关的书，输出格式：{format}").build();
 
         BeanOutputConverter<Book> converter = new BeanOutputConverter<Book>(Book.class);
 
@@ -42,15 +45,22 @@ public class StructureOutputController implements InitializingBean {
         return book.name() + " " + book.author() + " " + book.desc() + " " + book.price() + " " + book.publisher();
     }
 
+    /**
+     * 使用 entity() 方法直接转换为POJO（推荐方式）
+     */
     @RequestMapping("/convert")
     public String convert() {
-        Book book = chatClient.prompt("请给我推荐几本心理学有关的书")
+        Book book = chatClient.prompt("请给我推荐一本心理学有关的书")
                 .call().entity(Book.class);
+
         System.out.println(book.toString());
         return book.name() + " 、 " + book.author() + " 、 " + book.desc() + " 、 " + book.price() + " 、 " + book.publisher();
     }
 
 
+    /**
+     * 使用 ParameterizedTypeReference 转换为List
+     */
     @RequestMapping("/convertList")
     public String convertList() {
         List<Book> book = chatClient.prompt("请给我推荐几本心理学有关的书")
@@ -61,6 +71,9 @@ public class StructureOutputController implements InitializingBean {
         return book.toString();
     }
 
+    /**
+     * 使用 MapOutputConverter 转换为Map
+     */
     @RequestMapping("/convertMap")
     public String convertMap() {
         Map<String, Object> book = chatClient.prompt("请给我推荐几本心理学有关的书，书的内容包括书名、作者、价格、上市时间等信息，以书名作为key，书的信息作为value")
@@ -75,9 +88,7 @@ public class StructureOutputController implements InitializingBean {
     public void afterPropertiesSet() throws Exception {
         chatClient = ChatClient.builder(dashScopeChatModel)
                 // 实现 Logger 的 Advisor
-                .defaultAdvisors(
-                        new SimpleLoggerAdvisor()
-                )
+                .defaultAdvisors(new SimpleLoggerAdvisor())
                 // 设置 ChatClient 中 ChatModel 的 Options 参数
                 .defaultOptions(
                         DashScopeChatOptions.builder()

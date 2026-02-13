@@ -22,15 +22,17 @@ import java.util.Map;
 @RequestMapping("/prompt/template")
 public class PromptTemplateController implements InitializingBean {
 
-
     @Autowired
     private ChatModel dashScopeChatModel;
 
     private ChatClient chatClient;
 
-
+    /**
+     * 流式返回推荐的开源项目（使用占位符替换）
+     */
     @GetMapping("stream")
-    public Flux<String> stream(String topic) {
+    public Flux<String> stream(String topic, HttpServletResponse response) {
+        response.setCharacterEncoding("UTF-8");
         String template = """
                 请给我推荐几个关于{topic}的开源项目
                 """;
@@ -41,6 +43,9 @@ public class PromptTemplateController implements InitializingBean {
         return chatClient.prompt(promptTemplate.create()).stream().content();
     }
 
+    /**
+     * 流式返回推荐的开源项目（使用Map传参）
+     */
     @GetMapping("stream1")
     public Flux<String> stream1(String topic, HttpServletResponse response) {
         response.setCharacterEncoding("UTF-8");
@@ -53,6 +58,9 @@ public class PromptTemplateController implements InitializingBean {
     @Value("classpath:/templates/open_source_system_prompt.st")
     private Resource systemPrompt;
 
+    /**
+     * 使用文件模板进行聊天
+     */
     @GetMapping("/file")
     public Flux<String> file(@RequestParam(value = "message") String message, HttpServletResponse response) {
         response.setCharacterEncoding("UTF-8");
