@@ -35,6 +35,9 @@ import java.util.UUID;
 import static dev.langchain4j.data.message.SystemMessage.systemMessage;
 import static dev.langchain4j.data.message.UserMessage.userMessage;
 
+/**
+ * LangChain4j 底层 API 示例，包含流式输出、记忆管理、结构化输出和工具调用
+ */
 @RestController
 @RequestMapping("/langchain/low")
 public class LangChainLowLevelController {
@@ -71,9 +74,11 @@ public class LangChainLowLevelController {
         });
     }
 
+    // 流式输出
     @RequestMapping("/streamHello")
     public Flux<String> streamHello(HttpServletResponse response) {
         response.setCharacterEncoding("UTF-8");
+        // 将底层回调式流输出桥接为 Reactor Flux，便于前端消费。
         Flux<String> flux = Flux.create(fluxSink -> {
             streamingChatModel.chat("你好,给我推荐一些新疆美食？", new StreamingChatResponseHandler() {
                 @Override
@@ -95,8 +100,11 @@ public class LangChainLowLevelController {
         return flux;
     }
 
+    //不会使用，可以直接看下面使用chatMemory的
+    @Deprecated
     @RequestMapping("/memory")
     public String memory(HttpServletResponse response) {
+        // 手动维护消息列表，演示多轮对话上下文拼接。
         List<ChatMessage> messages = new ArrayList<>();
 
         //第一轮对话
@@ -127,6 +135,7 @@ public class LangChainLowLevelController {
 
     @RequestMapping("/memory1")
     public String memory1(HttpServletResponse response) {
+        // 使用 ChatMemory 统一管理会话窗口。
         ChatMemory chatMemory = MessageWindowChatMemory.withMaxMessages(10);
 
         //第一轮对话
@@ -155,9 +164,9 @@ public class LangChainLowLevelController {
         return answer2.text();
     }
 
+    // 结构化输出
     @RequestMapping("/structure")
     public String structure() {
-
         ResponseFormat responseFormat = ResponseFormat.builder()
                 .type(ResponseFormatType.JSON)
                 .jsonSchema(JsonSchema.builder()
@@ -181,60 +190,53 @@ public class LangChainLowLevelController {
                         """))
                 .build();
 
-//        ChatRequest chatRequest = ChatRequest.builder()
-//                .responseFormat(responseFormat)
-//                .messages(UserMessage.from("""
-//                        John is 42 years old and lives an independent life.
-//                        He stands 1.75 meters tall and carries himself with confidence.
-//                        Currently unmarried, he enjoys the freedom to focus on his personal goals and interests.output in json format
-//                        """))
-//                .build();
-
         return chatModel.chat(chatRequest).aiMessage().text();
     }
 
+    //工具调用
     @RequestMapping("tool")
     public String tool() {
-        //1、定义工具列表
+        // 完整工具调用流程：声明工具、执行工具、回填结果、二次推理。
+        //定义工具列表
         List<ToolSpecification> toolSpecifications = ToolSpecifications.toolSpecificationsFrom(TemperatureTools.class);
-        //2.构造用户提示词
+
+        //构造用户提示词
         UserMessage userMessage = UserMessage.from("2025年11月11日，杭州的气温怎样？");
         List<ChatMessage> chatMessages = new ArrayList<>();
         chatMessages.add(userMessage);
-        //3. 创建ChatRequest，并指定工具列表
+
+        //创建ChatRequest，并指定工具列表
         ChatRequest request = ChatRequest.builder()
                 .messages(userMessage)
                 .toolSpecifications(toolSpecifications)
                 .toolChoice(ToolChoice.AUTO)
                 .build();
-        //4. 调用模型
+
+        //调用模型
         ChatResponse response = chatModel.chat(request);
         AiMessage aiMessage = response.aiMessage();
-        //5.把模型结果添加到chatMessages中
+
+        //把模型结果添加到 chatMessages中
         chatMessages.add(aiMessage);
 
-        //6.执行工具
+        //执行工具
         List<ToolExecutionRequest> toolExecutionRequests = response.aiMessage().toolExecutionRequests();
         toolExecutionRequests.forEach(toolExecutionRequest -> {
             ToolExecutor toolExecutor = new DefaultToolExecutor(new TemperatureTools(), toolExecutionRequest);
             System.out.println("execute tool " + toolExecutionRequest.name());
             String result = toolExecutor.execute(toolExecutionRequest, UUID.randomUUID().toString());
             ToolExecutionResultMessage toolExecutionResultMessages = ToolExecutionResultMessage.from(toolExecutionRequest, result);
-            //7.把工具执行结果添加到chatMessages中
+            //把工具执行结果添加到 chatMessages中
             chatMessages.add(toolExecutionResultMessages);
         });
 
-//        //8. 再次调用模型，返回结果
-//        ChatResponse finalChatResponse = chatModel.chat(chatMessages);
-//        return finalChatResponse.aiMessage().text();
-
-        //8.重新构造ChatRequest，并使用之前的对话chatMessages，以及指定toolSpecifications
+        //重新构造ChatRequest，并使用之前的对话chatMessages，以及指定toolSpecifications
         ChatRequest finalRequest = ChatRequest.builder()
                 .messages(chatMessages)
                 .toolSpecifications(toolSpecifications)
                 .build();
 
-        //9. 再次调用模型，返回结果
+        //再次调用模型，返回结果
         ChatResponse finalChatResponse = chatModel.chat(finalRequest);
         return finalChatResponse.aiMessage().text();
     }

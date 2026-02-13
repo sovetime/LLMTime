@@ -27,6 +27,9 @@ import java.util.List;
 
 import static dev.langchain4j.data.document.loader.FileSystemDocumentLoader.loadDocument;
 
+/**
+ * RAG 示例接口：读取本地文档后构建临时向量检索并增强问答。
+ */
 @RestController
 @RequestMapping("/langchain4j/rag")
 public class LangChainRagController {
@@ -35,19 +38,20 @@ public class LangChainRagController {
     private String openAiApiKey;
 
     @Autowired
-    OpenAiChatModel chatModel;
+    private OpenAiChatModel chatModel;
 
     @GetMapping("retriever")
     public String retriever(String query, String filePath) {
+        // 该示例在请求内完成索引构建，适合演示，不适合大规模生产场景。
 
-        //1.加载文档
+        //加载文档
         Document document = loadDocument(filePath, new TextDocumentParser());
 
-        //2.分割文档
+        //分割文档
         DocumentByParagraphSplitter splitter = new DocumentByParagraphSplitter(300, 50);
         List<TextSegment> segmentList = splitter.split(document);
 
-        //3.把文档做向量化
+        //把文档做向量化
         OpenAiEmbeddingModel embeddingModel = OpenAiEmbeddingModel.builder()
                 .modelName("text-embedding-v4")  // 阿里云 DashScope 的 embedding 模型名称
                 .dimensions(768)  // text-embedding-v4 支持 768 维度
@@ -57,11 +61,12 @@ public class LangChainRagController {
 
         List<Embedding> embeddings = embeddingModel.embedAll(segmentList).content();
 
-        //4.把向量存入向量数据库
+        //把向量存入向量数据库
         EmbeddingStore embeddingStore = new InMemoryEmbeddingStore();
+        // 分段与向量按顺序对应，写入后可直接用于检索。
         embeddingStore.addAll(embeddings);
 
-        //5.创建检索器
+        //创建检索器
         EmbeddingStoreContentRetriever contentRetriever = new EmbeddingStoreContentRetriever(embeddingStore, embeddingModel);
 
         ContentInjector contentInjector = DefaultContentInjector.builder().promptTemplate(new PromptTemplate("""
@@ -89,7 +94,7 @@ public class LangChainRagController {
                 
                 """)).build();
 
-        //6.创建检索增强器
+        //创建检索增强器
         RetrievalAugmentor retrievalAugmentor = DefaultRetrievalAugmentor.builder()
                 .contentRetriever(contentRetriever)
                 .contentInjector(contentInjector)
@@ -99,6 +104,7 @@ public class LangChainRagController {
                 .chatModel(chatModel)
                 .retrievalAugmentor(retrievalAugmentor).build();
 
+        //问题会先检索上下文，再注入提示词由模型生成答案
         return aiService.chat(query);
     }
 }

@@ -10,6 +10,9 @@ import org.springframework.stereotype.Component;
 import java.util.Collections;
 import java.util.List;
 
+/**
+ * 基于 Redis 的 LangChain4j 对话记忆存储实现。
+ */
 @Component
 public class RedisChatMemoryStore implements ChatMemoryStore {
 
@@ -21,6 +24,7 @@ public class RedisChatMemoryStore implements ChatMemoryStore {
 
     @Override
     public List<ChatMessage> getMessages(Object memoryId) {
+        // memoryId 作为会话维度，映射到 Redis 的一个 key。
         String key = buildKey(memoryId);
         String json = redisTemplate.opsForValue().get(key);
 
@@ -33,6 +37,7 @@ public class RedisChatMemoryStore implements ChatMemoryStore {
 
     @Override
     public void updateMessages(Object memoryId, List<ChatMessage> messages) {
+        // 将完整会话序列序列化后覆盖写入。
         String key = buildKey(memoryId);
         String json = ChatMessageSerializer.messagesToJson(messages);
         redisTemplate.opsForValue().set(key, json);
@@ -44,6 +49,7 @@ public class RedisChatMemoryStore implements ChatMemoryStore {
     }
 
     private String buildKey(Object memoryId) {
+        // 统一 key 前缀，便于排查和批量管理。
         return "langchain4j:chat-memory:" + memoryId;
     }
 }

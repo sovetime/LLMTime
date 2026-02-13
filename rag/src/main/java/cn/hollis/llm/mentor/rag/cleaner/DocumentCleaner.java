@@ -8,10 +8,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-/**
- * @author Hollis
- * 文档清洗工具
- */
+
+//文档清洗工具
 public class DocumentCleaner {
     public static List<Document> cleanDocuments(List<Document> documents) {
         if (CollectionUtils.isEmpty(documents)) {
@@ -25,16 +23,16 @@ public class DocumentCleaner {
 
             String text = doc.getText();
 
-            // 1. 去掉多余空白字符（空格、制表符、换行等）
+            // 去掉多余空白字符（空格、制表符、换行等）
             text = text.replaceAll("\\s+", " ").trim();
 
-            // 2. 去掉无意义的乱码或特殊符号
+            // 去掉无意义的乱码或特殊符号
             text = text.replaceAll("[^\\p{L}\\p{N}\\p{P}\\p{Z}\\n]", "");
 
-            // 3. 可选：统一大小写
+            // 可选：统一大小写
             // text = text.toLowerCase();
 
-            // 4. 按换行拆分段落，去除重复段落
+            // 按换行拆分段落，去除重复段落
             String[] paragraphs = text.split("\\n+");
             Set<String> seen = new LinkedHashSet<>();
             for (String para : paragraphs) {

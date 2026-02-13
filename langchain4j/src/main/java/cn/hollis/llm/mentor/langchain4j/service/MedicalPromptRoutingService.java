@@ -4,15 +4,27 @@ import dev.langchain4j.service.SystemMessage;
 import dev.langchain4j.service.spring.AiService;
 import reactor.core.publisher.Flux;
 
+/**
+ * 医疗咨询提示词路由服务，按问题类型分发到不同专家角色。
+ */
 @AiService
 public interface MedicalPromptRoutingService {
 
-    @SystemMessage("你是一个专业的医生，可以从专业的医疗角度给出患者建议。")
+    /**
+     * 医生视角回答：聚焦症状、病因和就诊建议。
+     */
+    @SystemMessage("你是一名专业医生，请从医学诊断与健康管理角度回答用户问题。")
     Flux<String> doctorConsultation(String userMessage);
 
-    @SystemMessage("你是一个专业的药学专家，掌握丰富的药品知识，能够在用药方面给出更好的建议。")
+    /**
+     * 药师视角回答：聚焦用药方法、禁忌与不良反应。
+     */
+    @SystemMessage("你是一名专业药师，请从用药安全和药品知识角度回答用户问题。")
     Flux<String> pharmacistConsultation(String userMessage);
 
-    @SystemMessage("你需要判断用户的询问是关于病情咨询还是用药建议。如果是询问病情、症状、诊断相关的问题，回答'DOCTOR'。如果是询问药物、用药方法、药物副作用相关的问题，回答'PHARMACIST'。只回答DOCTOR或PHARMACIST，不要其他内容。")
+    /**
+     * 仅输出咨询类型：医生、药师
+     */
+    @SystemMessage("判断用户问题属于病情咨询还是用药咨询。只返回 DOCTOR 或 PHARMACIST，不要返回其他内容。")
     String determineConsultationType(String userMessage);
 }
