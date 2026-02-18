@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.util.List;
 
+//手动构建McpClient
 @Service
 public class ManualMcpClientService {
 
@@ -86,6 +87,7 @@ public class ManualMcpClientService {
                 .clientInfo(new io.modelcontextprotocol.spec.McpSchema.Implementation("sse-client", "1.0"))
                 .requestTimeout(Duration.ofSeconds(10))
                 .build();
+
         sseClient.initialize();
     }
 }

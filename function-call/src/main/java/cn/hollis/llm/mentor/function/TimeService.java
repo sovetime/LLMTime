@@ -9,9 +9,7 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 
 /**
- * 时区时间服务类
- * 提供基于时区的当前时间获取功能，支持函数调用模式
- * @author AI Assistant
+ * 服务代码示例
  */
 @Service
 public class TimeService {

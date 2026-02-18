@@ -8,9 +8,7 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 
 /**
- * 时区时间获取工具类
- * 提供基于时区获取当前时间的功能，作为AI模型的工具调用
- * @author AI Assistant
+ * 之前没有的新工具，可以直接通过@Tool注册为AI模型的工具
  */
 public class TimeTools {
     

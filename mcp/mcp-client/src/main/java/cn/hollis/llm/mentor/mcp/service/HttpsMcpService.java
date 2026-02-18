@@ -113,6 +113,6 @@ public class HttpsMcpService {
 //        createInsecureHttpsClient("https://127.0.0.1:8443", "/sse");
         createSecureHttpsClientPoc("https://127.0.0.1:8443",
                 "/sse",
-                "D:\\LLMentor\\LLMentor\\mcp\\mcp-server-sse-https\\src\\main\\resources\\mcp-server.crt");
+                "D:\\time\\Project\\LLMTime\\mcp\\mcp-server-sse-https\\src\\main\\resources\\mcp-server.crt");
     }
 }

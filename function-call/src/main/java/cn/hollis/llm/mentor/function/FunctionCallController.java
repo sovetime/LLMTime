@@ -31,16 +31,29 @@ public class FunctionCallController {
     private ChatClient chatClient;
 
     /**
-     * 处理聊天请求，支持函数调用
-     * @param query 用户查询内容
-     * @return AI模型生成的响应
+     * Service服务改造，将方法注册为AI模型的工具
      */
     @GetMapping("/chat")
     public String chat(@RequestParam("query") String query) {
         log.info("chat request => {}", query);
 
-        return chatClient.prompt().toolNames("getTimeFunction").user(query).call().content();
-//        return chatClient.prompt().tools(new TimeTools()).user(query).call().content();
+        return chatClient.prompt()
+                .toolNames("getTimeFunction")
+                .user(query)
+                .call().content();
+    }
+
+    /**
+     * 自定义新的工具类，注册为AI模型的工具
+     */
+    @GetMapping("/chat1")
+    public String chat1(@RequestParam("query") String query) {
+        log.info("chat request => {}", query);
+
+        return chatClient.prompt()
+                .tools(new TimeTools())
+                .user(query)
+                .call().content();
     }
 
     /**

@@ -18,11 +18,15 @@ public class McpClientController {
     private McpClientService mcpClientService;
 
     @Autowired
+    @Deprecated
     private ManualMcpClientService manualMcpClientService;
 
     @Autowired
     private RetrySSEMcpService retrySSEMcpService;
 
+    //自动注入
+    //测试MCP调用，支持stdio\sse\streamable
+    //GET http://localhost:8001/mcp/callTool?type=streamable
     @GetMapping("/callTool")
     public Object callTool(@RequestParam("type") String type) {
         return mcpClientService.callTool(type);
@@ -36,6 +40,9 @@ public class McpClientController {
         return mcpClientService.chat(query);
     }
 
+    //手动构建McpClient
+    //测试MCP调用，支持stdio\sse\streamable
+    //GET http://localhost:8001/mcp/callTool?type=streamable
     @GetMapping("/manualChat")
     public String manualChat(@RequestParam("query") String query) {
         log.info("manualChat request => {}", query);

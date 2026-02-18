@@ -11,11 +11,13 @@ import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import io.modelcontextprotocol.spec.McpSchema.*;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+//自动注入
 @Service
 @Slf4j
 public class McpClientService {
@@ -34,31 +36,31 @@ public class McpClientService {
     /**
      * 直接调用mcp server
      */
-    public McpSchema.CallToolResult callTool(String type) {
+    public CallToolResult callTool(String type) {
         String toolName = "getWeather";
         Map param = new HashMap();
         param.put("city", "北京");
 
         for (McpSyncClient client : mcpSyncClients) {
-            McpSchema.Implementation clientInfo = client.getClientInfo();
-            McpSchema.Implementation serverInfo = client.getServerInfo();
+            Implementation clientInfo = client.getClientInfo();
+            Implementation serverInfo = client.getServerInfo();
             log.info("clientInfo: {}", JSON.toJSONString(clientInfo));
             log.info("serverInfo: {}", JSON.toJSONString(serverInfo));
             try {
                 if (clientInfo.title().contains(type)) {
-                    log.info("开始调用mcp服务");
-                    McpSchema.CallToolRequest request = McpSchema.CallToolRequest.builder().name(toolName).arguments(param).build();
-                    McpSchema.CallToolResult result = client.callTool(request);
+                    log.info("调用mcp服务");
+                    CallToolRequest request = CallToolRequest.builder().name(toolName).arguments(param).build();
+                    CallToolResult result = client.callTool(request);
                     log.info("callTool result: {}", result);
                     return result;
                 }
             } catch (Exception ex) {
                 ex.printStackTrace();
             }
-            log.info("====================================================");
         }
         return null;
     }
+
     @PostConstruct
     public void init() {
         ToolCallback[] toolCallbacks = toolCallbackProvider.getToolCallbacks();
@@ -66,10 +68,6 @@ public class McpClientService {
         this.chatClient = ChatClient.builder(chatModel)
                 .defaultToolCallbacks(toolCallbacks)
                 .build();
-
-//        this.chatClient = ChatClient.builder(chatModel)
-//                .defaultTools(new WeatherService())
-//                .build();
     }
 
     /**

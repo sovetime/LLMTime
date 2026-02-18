@@ -40,6 +40,7 @@ public class LangChainRagController {
     @Autowired
     private OpenAiChatModel chatModel;
 
+    // 检索增强
     @GetMapping("retriever")
     public String retriever(String query, String filePath) {
         // 该示例在请求内完成索引构建，适合演示，不适合大规模生产场景。

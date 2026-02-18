@@ -7,9 +7,7 @@ import org.springframework.context.annotation.Description;
 import java.util.function.Function;
 
 /**
- * 函数调用配置类
- * 配置AI模型可调用的外部函数
- * @author AI Assistant
+ * 将 Service服务的方法封装提供给AI模型调用
  */
 @Configuration
 public class FunctionCallConfiguration {

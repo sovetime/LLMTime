@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+//sse重连，后续版本推荐使用streamable
 @Service
 @Slf4j
 public class RetrySSEMcpService {

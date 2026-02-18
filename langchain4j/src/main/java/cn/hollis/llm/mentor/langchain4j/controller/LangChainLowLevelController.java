@@ -37,6 +37,7 @@ import static dev.langchain4j.data.message.UserMessage.userMessage;
 
 /**
  * LangChain4j 底层 API 示例，包含流式输出、记忆管理、结构化输出和工具调用
+ * 上层开发都封装好了，不建议直接使用
  */
 @RestController
 @RequestMapping("/langchain/low")
