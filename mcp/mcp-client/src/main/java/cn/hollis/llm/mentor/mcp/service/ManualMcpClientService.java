@@ -15,7 +15,7 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.util.List;
 
-//手动构建McpClient
+//手动构建 McpClient
 @Service
 public class ManualMcpClientService {
 
