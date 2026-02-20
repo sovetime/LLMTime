@@ -49,7 +49,10 @@ public class LangChainRagController {
         Document document = loadDocument(filePath, new TextDocumentParser());
 
         //分割文档
-        DocumentByParagraphSplitter splitter = new DocumentByParagraphSplitter(300, 50);
+        DocumentByParagraphSplitter splitter = new DocumentByParagraphSplitter(
+                300,
+                50);
+
         List<TextSegment> segmentList = splitter.split(document);
 
         //把文档做向量化

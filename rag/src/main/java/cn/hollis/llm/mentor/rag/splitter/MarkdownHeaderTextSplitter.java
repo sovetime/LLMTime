@@ -9,9 +9,6 @@ import java.util.stream.Collectors;
 /**
  * Markdown文档分割器，基于标题层级进行文档分段
  * 支持保留元数据、父子分段关系等高级特性
- *
- * @author andyflury （https://github.com/langchain4j/langchain4j/issues/574 ）
- * @author Hollis, 增加对父子分段的支持
  */
 public class MarkdownHeaderTextSplitter extends TextSplitter {
 

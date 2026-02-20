@@ -9,6 +9,8 @@ import org.springframework.stereotype.Service;
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
+
+//文本提取器
 @Service
 public class TextReaderStrategy implements DocumentReaderStrategy {
     @Override

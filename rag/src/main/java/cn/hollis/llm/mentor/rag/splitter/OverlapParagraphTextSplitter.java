@@ -9,6 +9,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+
+//固定大小切分
+//自定义重叠段落切分器
+//SpringAI 官方没有提供重叠机制
 public class OverlapParagraphTextSplitter extends TextSplitter {
 
     // 每块最大字符数
@@ -31,18 +35,25 @@ public class OverlapParagraphTextSplitter extends TextSplitter {
         this.overlap = overlap;
     }
 
+    //将长文本按照固定大小切分为多个文本块，支持块间重叠以保留上下文语义
+    //以换行符为段落边界，逐段填充当前块<
+    //当前块达到 {@code chunkSize} 时保存，并将末尾 {@code overlap} 个字符作为下一块的起始内容
     protected List<String> splitText(String text) {
-        if (StringUtils.isBlank(text)) return Collections.emptyList();
+        if (StringUtils.isBlank(text))
+            return Collections.emptyList();
 
+        // 按换行符拆分段落，保留自然段落边界
         String[] paragraphs = text.split("\\n+");
         List<String> allChunks = new ArrayList<>();
         StringBuilder currentChunk = new StringBuilder();
 
         for (String paragraph : paragraphs) {
-            if (StringUtils.isBlank(paragraph)) continue;
+            if (StringUtils.isBlank(paragraph))
+                continue;
 
             int start = 0;
             while (start < paragraph.length()) {
+                // 计算当前块剩余可填充空间
                 int remainingSpace = chunkSize - currentChunk.length();
                 int end = Math.min(start + remainingSpace, paragraph.length());
 
@@ -52,7 +63,7 @@ public class OverlapParagraphTextSplitter extends TextSplitter {
                 if (currentChunk.length() >= chunkSize) {
                     allChunks.add(currentChunk.toString());
 
-                    // 计算重叠
+                    // 截取末尾 overlap 个字符作为新块的前缀，保证语义连续性
                     String overlapText = "";
                     if (overlap > 0) {
                         int overlapStart = Math.max(0, currentChunk.length() - overlap);

@@ -12,6 +12,8 @@ import java.io.File;
 import java.io.IOException;
 import java.util.List;
 
+
+//Html 读取器
 @Service
 public class JsoupReaderStrategy implements DocumentReaderStrategy {
     @Override

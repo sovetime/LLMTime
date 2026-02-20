@@ -17,8 +17,6 @@ import java.util.stream.Collectors;
 /**
  * Word文档分割器，基于标题样式层级进行文档分段
  * 支持保留元数据、父子分段关系等高级特性
- *
- * @author Hollis
  */
 public class WordHeaderTextSplitter extends OverlapParagraphTextSplitter {
 

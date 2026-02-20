@@ -158,7 +158,7 @@ public class RagSplitterController {
     @Autowired
     private PdfMultimodalProcessor processer;
 
-    @RequestMapping("mulitModal")
+    @RequestMapping("/mulitModal")
     public String mulitModal(String filePath) throws Exception {
 
         String result = processer.processPdf(new File(filePath));

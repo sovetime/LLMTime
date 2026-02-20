@@ -12,6 +12,8 @@ import java.io.File;
 import java.io.IOException;
 import java.util.List;
 
+
+//Json读取器
 @Service
 public class JsonReaderStrategy implements DocumentReaderStrategy {
     @Override

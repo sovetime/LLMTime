@@ -16,6 +16,9 @@ import io.modelcontextprotocol.spec.McpSchema.*;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.Arrays;
+import java.util.stream.Collectors;
 
 //自动注入
 @Service
@@ -24,9 +27,6 @@ public class McpClientService {
 
     @Autowired
     private List<McpSyncClient> mcpSyncClients;
-
-    @Autowired
-    private SyncMcpToolCallbackProvider toolCallbackProvider;
 
     @Autowired
     private OpenAiChatModel chatModel;
@@ -63,12 +63,23 @@ public class McpClientService {
 
     @PostConstruct
     public void init() {
-        //使用SpringAi提供的方法
-//        ToolCallback[] toolCallbacks = toolCallbackProvider.getToolCallbacks();
+        // mcp工具过滤
+        SyncMcpToolCallbackProvider provider = SyncMcpToolCallbackProvider.builder()
+                .mcpClients(mcpSyncClients)
+                .toolFilter((conn, tool) -> tool.name().startsWith("goods"))
+                .build();
 
-        //改造源码跳过模型总结
-        ReturnDirectMcpToolCallbackProvider callbackProvider = new ReturnDirectMcpToolCallbackProvider(mcpSyncClients,true);
-        ToolCallback[] toolCallbacks = callbackProvider.getToolCallbacks();
+        // 先通过 toolFilter 得到允许的工具名
+        Set<String> allowedToolNames = Arrays.stream(provider.getToolCallbacks())
+                .map(callback -> callback.getToolDefinition().name())
+                .collect(Collectors.toSet());
+
+        // 再叠加 returnDirect 能力
+        ReturnDirectMcpToolCallbackProvider callbackProvider = new ReturnDirectMcpToolCallbackProvider(mcpSyncClients, true);
+//        ToolCallback[] toolCallbacks = callbackProvider.getToolCallbacks();
+        ToolCallback[] toolCallbacks = Arrays.stream(callbackProvider.getToolCallbacks())
+                .filter(callback -> allowedToolNames.contains(callback.getToolDefinition().name()))
+                .toArray(ToolCallback[]::new);
 
         this.chatClient = ChatClient.builder(chatModel)
                 .defaultToolCallbacks(toolCallbacks)
