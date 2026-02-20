@@ -1,8 +1,8 @@
 package cn.hollis.llm.mentor.mcp.service;
 
+import cn.hollis.llm.mentor.mcp.callback.ReturnDirectMcpToolCallbackProvider;
 import com.alibaba.fastjson2.JSON;
 import io.modelcontextprotocol.client.McpSyncClient;
-import io.modelcontextprotocol.spec.McpSchema;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -63,11 +63,21 @@ public class McpClientService {
 
     @PostConstruct
     public void init() {
-        ToolCallback[] toolCallbacks = toolCallbackProvider.getToolCallbacks();
+        //使用SpringAi提供的方法
+//        ToolCallback[] toolCallbacks = toolCallbackProvider.getToolCallbacks();
+
+        //改造源码跳过模型总结
+        ReturnDirectMcpToolCallbackProvider callbackProvider = new ReturnDirectMcpToolCallbackProvider(mcpSyncClients,true);
+        ToolCallback[] toolCallbacks = callbackProvider.getToolCallbacks();
 
         this.chatClient = ChatClient.builder(chatModel)
                 .defaultToolCallbacks(toolCallbacks)
                 .build();
+
+        //本地 Functioncall 跳过模型总结
+        //        this.chatClient = ChatClient.builder(chatModel)
+//                .defaultTools(new WeatherService())
+//                .build();
     }
 
     /**

@@ -1,6 +1,6 @@
 package cn.hollis.llm.mentor.mcp.controller;
 
-import cn.hollis.llm.mentor.mcp.service.ManualMcpClientService;
+import cn.hollis.llm.mentor.mcp.deep.ManualMcpClientService;
 import cn.hollis.llm.mentor.mcp.service.McpClientService;
 import cn.hollis.llm.mentor.mcp.service.RetrySSEMcpService;
 import lombok.RequiredArgsConstructor;
@@ -18,7 +18,6 @@ public class McpClientController {
     private McpClientService mcpClientService;
 
     @Autowired
-    @Deprecated
     private ManualMcpClientService manualMcpClientService;
 
     @Autowired
@@ -32,17 +31,22 @@ public class McpClientController {
         return mcpClientService.callTool(type);
     }
 
-
+    //正常聊天，跳过模型总结
+    //http://localhost:8001/mcp/chat?message='上海天气怎么样'
     @GetMapping("/chat")
-    public String chat(@RequestParam("query") String query) {
-        log.info("chat request => {}", query);
-
-        return mcpClientService.chat(query);
+    public String chat(@RequestParam("message") String message) {
+        log.info("chat request => {}", message);
+        return mcpClientService.chat(message);
     }
 
-    //手动构建McpClient
-    //测试MCP调用，支持stdio\sse\streamable
-    //GET http://localhost:8001/mcp/callTool?type=streamable
+    //sse重连
+    @GetMapping("/retryChat")
+    public String retry(@RequestParam("message") String message) {
+        log.info("retry chat request => {}", message);
+        return retrySSEMcpService.chat(message);
+    }
+
+    //手动构建 McpClient
     @GetMapping("/manualChat")
     public String manualChat(@RequestParam("query") String query) {
         log.info("manualChat request => {}", query);
@@ -50,10 +54,4 @@ public class McpClientController {
         return manualMcpClientService.chat(query);
     }
 
-    @GetMapping("/retryChat")
-    public String retry(@RequestParam("query") String query) {
-        log.info("retry chat request => {}", query);
-
-        return retrySSEMcpService.chat(query);
-    }
 }

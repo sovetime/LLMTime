@@ -1,5 +1,6 @@
-package cn.hollis.llm.mentor.mcp.service;
+package cn.hollis.llm.mentor.mcp.deep;
 
+import cn.hollis.llm.mentor.mcp.callback.ReturnDirectMcpToolCallbackProvider;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
@@ -15,7 +16,7 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.util.List;
 
-//手动构建 McpClient
+//手动构建 McpClient，定制开发需要，这里开发用自动的就可以
 @Service
 public class ManualMcpClientService {
 
@@ -63,8 +64,6 @@ public class ManualMcpClientService {
                 .build();
 
         ToolCallback[] callbacks = provider.getToolCallbacks();
-//        ReturnDirectMcpToolCallbackProvider returnDirectMcpToolCallbackProvider = new ReturnDirectMcpToolCallbackProvider(clients,true);
-//        ToolCallback[] callbacks = returnDirectMcpToolCallbackProvider.getToolCallbacks();
 
         this.chatClient = ChatClient.builder(chatModel)
                 .defaultToolCallbacks(callbacks)

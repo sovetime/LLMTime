@@ -24,10 +24,7 @@ public class WeatherService {
         };
     }
 
-    @Tool(
-            name = "query_weather_by_city&date",
-            description = "根据城市和日期获取天气信息"
-    )
+    @Tool(name = "query_weather_by_city&date", description = "根据城市和日期获取天气信息")
     public WeatherResponse queryWeather(WeatherRequest request) {
         log.info("query weather for city:{}", JSON.toJSONString(request));
         try {

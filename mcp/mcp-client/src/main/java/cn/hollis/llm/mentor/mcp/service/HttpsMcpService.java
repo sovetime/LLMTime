@@ -95,7 +95,7 @@ public class HttpsMcpService {
 
     /**
      * 创建基于自定义 CA 证书的安全 MCP 客户端（安全模式 POC）
-     * <p>
+     *
      * 通过加载指定的 CA 证书文件构建受信任的 TrustManager，
      * 仅信任由该 CA 签发的服务端证书，同时保留默认的主机名验证逻辑。
      *
