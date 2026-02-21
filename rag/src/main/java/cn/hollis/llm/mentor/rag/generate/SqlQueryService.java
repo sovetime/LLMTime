@@ -4,6 +4,7 @@ import jakarta.annotation.PostConstruct;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,10 +13,12 @@ import org.springframework.stereotype.Service;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Map;
 
 @Service
 public class SqlQueryService {
+
     private ChatClient chatClient;
 
     @Autowired
@@ -118,9 +121,14 @@ public class SqlQueryService {
 
 
     public String text2sql(String query) {
+        //提示词拼接
         PromptTemplate promptTemplate = new PromptTemplate(TEXT_2_SQL_PROMPT);
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-        Prompt prompt = promptTemplate.create(Map.of("user_query", query, "tables", TABLES, "today", sdf.format(new Date())));
+        Map<String, Object> params = new HashMap<>();
+        params.put("user_query", query);
+        params.put("tables", TABLES);
+        params.put("today", sdf.format(new Date()));
+        Prompt prompt = promptTemplate.create(params);
 
         String sql = chatClient.prompt(prompt)
                 .call()

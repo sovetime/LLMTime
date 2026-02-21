@@ -43,7 +43,7 @@ public class MarkdownHeaderTextSplitter extends TextSplitter {
     }
 
     /**
-     * 重写apply方法以支持元数据的传递
+     * 重写 apply方法以支持元数据的传递
      */
     @Override
     public List<Document> apply(List<Document> documents) {

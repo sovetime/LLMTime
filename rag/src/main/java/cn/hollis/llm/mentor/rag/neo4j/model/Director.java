@@ -1,4 +1,4 @@
-package cn.hollis.llm.mentor.rag.model;
+package cn.hollis.llm.mentor.rag.neo4j.model;
 
 import org.springframework.data.neo4j.core.schema.Id;
 import org.springframework.data.neo4j.core.schema.Node;
@@ -7,9 +7,6 @@ import org.springframework.data.neo4j.core.schema.Node;
 public class Director {
     @Id
     private String name;
-
-    public Director() {
-    }
 
     public Director(String name) {
         this.name = name;

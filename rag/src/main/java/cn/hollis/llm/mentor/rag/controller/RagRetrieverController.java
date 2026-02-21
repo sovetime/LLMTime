@@ -27,6 +27,9 @@ public class RagRetrieverController implements InitializingBean {
     @Autowired
     private EmbeddingService embeddingService;
 
+    private ChatClient chatClient;
+
+
     @GetMapping("/query")
     public String query(String query, double threshold) {
         List<Document> documents = embeddingService.similaritySearch(SearchRequest
@@ -73,7 +76,6 @@ public class RagRetrieverController implements InitializingBean {
     }
 
 
-    private ChatClient chatClient;
 
     @GetMapping("/retrieveAdvisor")
     public String retrieveAdvisor(String query) {

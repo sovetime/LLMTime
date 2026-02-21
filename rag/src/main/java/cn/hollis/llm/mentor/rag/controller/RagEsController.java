@@ -24,15 +24,16 @@ public class RagEsController {
     @Autowired
     private ElasticSearchService elasticSearchService;
 
+    // 写入ES
     @RequestMapping("write")
     public String write(String filePath) throws Exception {
-        // 1. 加载文档
+        // 加载文档
         List<Document> documents = selector.read(new File(filePath));
 
-        // 2. 文本清洗
+        // 文本清洗
         documents = DocumentCleaner.cleanDocuments(documents);
 
-        // 3. 文档分片
+        // 文档分片
         OverlapParagraphTextSplitter splitter = new OverlapParagraphTextSplitter(
                 // 每块最大字符数
                 200,
@@ -41,7 +42,7 @@ public class RagEsController {
         );
         List<Document> apply = splitter.apply(documents);
 
-        // 4. 存储到ES
+        // 存储到ES
         List<EsDocumentChunk> esDocs = apply.stream().map(doc -> {
             EsDocumentChunk es = new EsDocumentChunk();
             es.setId(doc.getId());
@@ -54,6 +55,7 @@ public class RagEsController {
         return "success";
     }
 
+    //关键词检索
     @RequestMapping("search")
     public List<EsDocumentChunk> search(String keyword) throws Exception {
         return elasticSearchService.searchByKeyword(keyword);

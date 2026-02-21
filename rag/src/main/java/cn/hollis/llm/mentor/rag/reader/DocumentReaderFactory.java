@@ -14,7 +14,7 @@ public class DocumentReaderFactory {
     @Autowired
     private List<DocumentReaderStrategy> strategies;
 
-    //文件转换
+    //文件转换成 Document
     public List<Document> read(File file) throws IOException {
         for (DocumentReaderStrategy strategy : strategies) {
             if (strategy.supports(file)) {

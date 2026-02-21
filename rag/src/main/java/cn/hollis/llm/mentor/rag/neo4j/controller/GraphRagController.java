@@ -1,17 +1,18 @@
-package cn.hollis.llm.mentor.rag.controller;
+package cn.hollis.llm.mentor.rag.neo4j.controller;
 
-import cn.hollis.llm.mentor.rag.model.Director;
-import cn.hollis.llm.mentor.rag.model.Movie;
-import cn.hollis.llm.mentor.rag.service.GraphService;
+import cn.hollis.llm.mentor.rag.neo4j.model.Director;
+import cn.hollis.llm.mentor.rag.neo4j.model.Movie;
+import cn.hollis.llm.mentor.rag.neo4j.service.GraphService;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.neo4j.core.Neo4jClient;
 import org.springframework.data.neo4j.core.Neo4jTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+
+//rag图数据库
 @RequestMapping("/rag/graph")
 @RestController
 public class GraphRagController {

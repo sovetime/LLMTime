@@ -1,7 +1,7 @@
-package cn.hollis.llm.mentor.rag.service;
+package cn.hollis.llm.mentor.rag.neo4j.service;
 
-import cn.hollis.llm.mentor.rag.model.DirectorMoviesDto;
-import cn.hollis.llm.mentor.rag.repo.MovieGraphRepository;
+import cn.hollis.llm.mentor.rag.neo4j.model.DirectorMoviesDto;
+import cn.hollis.llm.mentor.rag.neo4j.repo.MovieGraphRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -13,7 +13,9 @@ public class GraphService {
     @Autowired
     private MovieGraphRepository repository;
 
+    // 根据电影名称查询该电影的导演，并返回该导演执导的其他电影
     public String retrieveContext(String movieName) {
+        // 查询与给定电影同导演的其他电影
         List<DirectorMoviesDto> results = repository.findOtherMoviesBySameDirector(movieName);
 
         if (results.isEmpty()) {

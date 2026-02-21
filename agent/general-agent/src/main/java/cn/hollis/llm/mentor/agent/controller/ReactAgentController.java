@@ -41,6 +41,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.PrimitiveIterator;
 
+
+//
 @RestController
 @RequestMapping("/react")
 public class ReactAgentController {
@@ -53,6 +55,9 @@ public class ReactAgentController {
 
     @Autowired
     ToolCallingManager toolCallingManager;
+
+    @Autowired
+    private DataSource dataSource;
 
 
     @GetMapping("/call")
@@ -67,9 +72,9 @@ public class ReactAgentController {
         //定义提示词
         Prompt prompt = new Prompt(
                 List.of(new SystemMessage("你是一个智能助手，你擅长使用工具帮我解决问题。" +
-                        "约束：时间通过工具获取，不要捏造"), new UserMessage("帮我分析最近三个月特斯拉（TSLA）的股价走势，并结合新闻事件解释可能的影响因素。" +
-                        "" +
-                        "今天是:" + Calendar.getInstance().getTime())),
+                        "约束：时间通过工具获取，不要捏造"),
+                        new UserMessage("帮我分析最近三个月特斯拉（TSLA）的股价走势，并结合新闻事件解释可能的影响因素。" +
+                        "" + "今天是:" + Calendar.getInstance().getTime())),
                 chatOptions);
 
         //添加提示词到记忆
@@ -141,6 +146,7 @@ public class ReactAgentController {
         return chatResponse.getResult().getOutput().getText();
     }
 
+    //SpringAiAlibaba ReAgent,封装好的ReactAgent
     @GetMapping("/chatWithSpringAiAlibaba")
     public String chatWithSpringAiAlibaba(String conversationId) throws GraphRunnerException {
 
@@ -167,10 +173,7 @@ public class ReactAgentController {
         return chatResponse.getText();
     }
 
-
-    @Autowired
-    private DataSource dataSource;
-
+    //使用MySQL保存会话
     @GetMapping("/chatWithMySqlSaver")
     public String chatWithMySqlSaver(String conversationId,String msg) throws GraphRunnerException {
 
@@ -192,6 +195,7 @@ public class ReactAgentController {
         return chatResponse.getText();
     }
 
+    //流式输出
     @GetMapping("/streamWithSpringAiAlibaba")
     public Flux<String> streamWithSpringAiAlibaba(String conversationId) throws GraphRunnerException {
 

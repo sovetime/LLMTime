@@ -4,17 +4,20 @@ import cn.hollis.llm.mentor.rag.cleaner.DocumentCleaner;
 import cn.hollis.llm.mentor.rag.embedding.EmbeddingService;
 import cn.hollis.llm.mentor.rag.reader.DocumentReaderFactory;
 import cn.hollis.llm.mentor.rag.splitter.OverlapParagraphTextSplitter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
-import java.util.stream.Collectors;
 
+//rag向量转换
 @RestController
 @RequestMapping("/rag/embedding")
 public class RagEmbeddingController {
@@ -36,11 +39,12 @@ public class RagEmbeddingController {
     @Autowired
     private EmbeddingService embeddingService;
 
-    @RequestMapping("embed")
+    //文档向量化村粗
+    @RequestMapping("/embed")
     public String embed(String filePath) {
-
         List<Document> documents;
         try {
+            //文档转换成Document
             documents = documentReaderFactory.read(new File(filePath));
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -52,11 +56,10 @@ public class RagEmbeddingController {
                     OverlapParagraphTextSplitter splitter = new OverlapParagraphTextSplitter(1000, 50);
                     return splitter.split(document).stream();
                 })
-                .collect(Collectors.toList());
+                .toList();
 
         //向量化并存储
         embeddingService.embedAndStore(DocumentCleaner.cleanDocuments(allChunkedDocuments));
-
         return "success";
     }
 }

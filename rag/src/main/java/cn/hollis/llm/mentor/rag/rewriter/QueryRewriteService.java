@@ -104,12 +104,7 @@ public class QueryRewriteService {
     private static final String QUESTION = "QUESTION";
     private static final String CHAT_HISTORY = "CHAT_HISTORY";
 
-    /**
-     * 问题分解
-     *
-     * @param question
-     * @return
-     */
+    //问题分解
     public List<String> decompose(String question) {
         log.info("===========进入问题分解流程===========");
         log.info("原始问题: {}", question);

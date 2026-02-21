@@ -6,6 +6,7 @@ import cn.hollis.llm.mentor.rag.es.EsDocumentChunk;
 import cn.hollis.llm.mentor.rag.reader.DocumentReaderFactory;
 import cn.hollis.llm.mentor.rag.rerank.RerankUtil;
 import com.alibaba.cloud.ai.transformer.splitter.RecursiveCharacterTextSplitter;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.document.Document;
@@ -17,8 +18,11 @@ import java.io.File;
 import java.util.List;
 import java.util.Map;
 
+
+//rag 混合检索
 @RestController
 @RequestMapping("/rag/hybrid")
+@Slf4j
 public class RagHybridController {
 
     @Autowired
@@ -30,13 +34,15 @@ public class RagHybridController {
     @Autowired
     private ElasticSearchService elasticSearchService;
 
+    @Autowired
+    private ChatModel chatModel;
 
     @RequestMapping("write")
     public String write(String filePath) throws Exception {
-        // 1. 加载文档
+        // 加载文档
         List<Document> documents = selector.read(new File(filePath));
 
-        // 3. 文档分片
+        // 文档分片
         RecursiveCharacterTextSplitter splitter = new RecursiveCharacterTextSplitter(
                 // 每块最大字符数
                 100,
@@ -52,7 +58,7 @@ public class RagHybridController {
             System.out.println("--------------------------------------------------");
         }
 
-        //存储到ES
+        //存储到 ES
         List<EsDocumentChunk> esDocs = spllittedDocuments.stream().map(doc -> {
             EsDocumentChunk es = new EsDocumentChunk();
             es.setId(doc.getId());
@@ -61,43 +67,42 @@ public class RagHybridController {
             return es;
         }).toList();
 
+        //批量写入文档
         elasticSearchService.bulkIndex(esDocs);
-
         //向量化并存储
         embeddingService.embedAndStore(spllittedDocuments);
 
         return "success";
     }
 
+    //关键词检索
     @RequestMapping("searchFromEs")
     public List<EsDocumentChunk> searchFromEs(String keyword) throws Exception {
         return elasticSearchService.searchByKeyword(keyword);
     }
 
+    //向量检索
     @RequestMapping("searchFromVector")
     public List<Document> searchFromVector(String keyword) throws Exception {
         return embeddingService.similaritySearch(keyword);
     }
 
+    //混合检索
     @RequestMapping("searchFromHybrid")
     public List<String> searchFromHybrid(String keyword) throws Exception {
+        // 关键词检索
         List<EsDocumentChunk> esDocs = elasticSearchService.searchByKeyword(keyword);
+        log.info("esDocs: {}", esDocs);
 
-        System.out.println(esDocs);
-        System.out.println("================");
-
+        // 向量检索
         List<Document> vectorDocs = embeddingService.similaritySearch(keyword);
-        System.out.println(vectorDocs);
-        System.out.println("================");
+        log.info("vectorDocs: {}", vectorDocs);
 
+        // 重排序
         List<String> result = RerankUtil.rerankFusion(vectorDocs, esDocs, keyword, 5);
-        System.out.println(result);
-        System.out.println("================");
+        log.info("result: {}", result);
         return result;
     }
-
-    @Autowired
-    private ChatModel chatModel;
 
     @RequestMapping("chatToHybrid")
     public String chatToHybrid(String keyword) throws Exception {
@@ -110,13 +115,11 @@ public class RagHybridController {
                         
                         """ + keyword
         );
+        log.info("newQuestion: {}", newQuestion);
 
-        System.out.println(newQuestion);
-
+        //混合检索
         List<EsDocumentChunk> esDocs = elasticSearchService.searchByKeyword(newQuestion);
-
         List<Document> vectorDocs = embeddingService.similaritySearch(newQuestion);
-
         List<String> result = RerankUtil.rerankFusion(vectorDocs, esDocs, newQuestion, 5);
 
         String prompt = """

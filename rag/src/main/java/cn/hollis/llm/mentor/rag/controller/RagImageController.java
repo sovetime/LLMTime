@@ -42,6 +42,9 @@ public class RagImageController {
     @Autowired
     private ChatModel chatModel;
 
+    @Autowired
+    private VectorStore vectorStore;
+
     @RequestMapping("/callWithSpringAiAlibaba")
     public String callWithSpringAiAlibaba() throws URISyntaxException, MalformedURLException {
         List<Media> mediaList = List.of(new Media(MimeTypeUtils.IMAGE_PNG, new URI("https://cdn.nlark.com/yuque/0/2025/png/5378072/1762350625634-664f1db7-e1c9-4daa-ab8e-81b6b7da5a68.png").toURL().toURI()));
@@ -118,18 +121,10 @@ public class RagImageController {
     }
 
 
-    @Autowired
-    private VectorStore vectorStore;
 
     @RequestMapping("chat")
     public String chat(String question) {
-
-        VectorStoreDocumentRetriever retriever = VectorStoreDocumentRetriever.builder()
-                .vectorStore(vectorStore)
-                .topK(5)
-                .similarityThreshold(0.3)
-                .build();
-
+        //构建查询增强器
         QueryAugmenter queryAugmenter = ContextualQueryAugmenter.builder()
                 .allowEmptyContext(true)
                 .promptTemplate(new PromptTemplate("""
@@ -158,10 +153,27 @@ public class RagImageController {
                         """))
                 .build();
 
+        //基于向量相似度进检索文档
+        VectorStoreDocumentRetriever retriever = VectorStoreDocumentRetriever.builder()
+                //绑定向量存储
+                .vectorStore(vectorStore)
+                //返回相似度最高的5个文档
+                .topK(5)
+                //相似度低于0.3的过滤掉
+                .similarityThreshold(0.3)
+                .build();
 
-        RetrievalAugmentationAdvisor retrievalAugmentationAdvisor = RetrievalAugmentationAdvisor.builder().documentRetriever(retriever).queryAugmenter(queryAugmenter).build();
+        //SpringAI 自带的模块化Rag支持
+        RetrievalAugmentationAdvisor retrievalAugmentationAdvisor = RetrievalAugmentationAdvisor.builder()
+                //检索阶段，从向量库检索文档(必须）
+                .documentRetriever(retriever)
+                //生成阶段，构建增强提示词
+                .queryAugmenter(queryAugmenter)
+                .build();
 
-        ChatClient chatClient = ChatClient.builder(chatModel).defaultAdvisors(retrievalAugmentationAdvisor).build();
+        ChatClient chatClient = ChatClient.builder(chatModel)
+                .defaultAdvisors(retrievalAugmentationAdvisor)
+                .build();
 
         String result =  chatClient.prompt(new Prompt(question)).call().content();
         System.out.println(result);

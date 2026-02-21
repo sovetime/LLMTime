@@ -11,6 +11,7 @@ import java.util.stream.Collectors;
 
 //文档清洗工具
 public class DocumentCleaner {
+
     public static List<Document> cleanDocuments(List<Document> documents) {
         if (CollectionUtils.isEmpty(documents)) {
             return documents;

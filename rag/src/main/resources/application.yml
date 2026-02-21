@@ -6,6 +6,7 @@ spring:
       api-key: @dashscope.api.key@
       embedding:
         options:
+          #没有免费额度，谨慎使用
           model: text-embedding-v4
           dimensions: 768
     vectorstore:
@@ -19,13 +20,13 @@ spring:
         # 批量处理大小
         max-document-batch-size: 9
         # 启动时是否自动创建表（设为false，避免启动时连接失败）
-        initialize-schema: false
+        initialize-schema: true
         # 创建的表名
         table-name: vector_st
   datasource:
-    url: jdbc:postgresql://localhost:5433/rag_test # 记得改成你自己的
-    username: pgvector # 记得改成你自己的
-    password: pgvector # 记得改成你自己的
+    url: jdbc:postgresql://localhost:5432/rag_test
+    username: pgvector
+    password: pgvector
   neo4j:
     uri: bolt://localhost:7687 # 记得改成你自己的
     authentication:

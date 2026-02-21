@@ -38,7 +38,12 @@ public class PdfReaderStrategy implements DocumentReaderStrategy {
                         .build())
                 .build();
 
-        ParagraphPdfDocumentReader pdfReader = new ParagraphPdfDocumentReader(resource, config);
-        return pdfReader.read();
+        try {
+            // 优先用段落读取，语义更好
+            return new ParagraphPdfDocumentReader(resource, config).read();
+        } catch (IllegalArgumentException e) {
+            // PDF 没有 TOC，降级为按页读取
+            return new PagePdfDocumentReader(resource, config).get();
+        }
     }
 }

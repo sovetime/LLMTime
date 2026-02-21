@@ -8,6 +8,7 @@ import java.math.BigDecimal;
 import java.util.Date;
 import java.util.List;
 
+// 股票工具类 -- 伪代码
 public class StockTools {
 
     @Tool(name = "search_prices", description = "查询近期股票价格")

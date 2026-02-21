@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+//SpringAI模块化Rag功能
 @RestController
 @RequestMapping("/rag/modular")
 public class

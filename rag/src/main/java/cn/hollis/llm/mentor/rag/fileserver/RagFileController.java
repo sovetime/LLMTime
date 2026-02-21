@@ -1,6 +1,5 @@
-package cn.hollis.llm.mentor.rag.controller;
+package cn.hollis.llm.mentor.rag.fileserver;
 
-import cn.hollis.llm.mentor.rag.fileserver.MinioService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
