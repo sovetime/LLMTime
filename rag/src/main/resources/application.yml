@@ -39,10 +39,8 @@ spring:
   sql:
     init:
       continue-on-error: true  # SQL初始化失败时继续启动
-elasticsearch:
-  host: localhost
-  port: 9200
-  scheme: http
+  elasticsearch:
+    uris: http://localhost:9200
 
 minio:
   url: http://localhost:9000 # 记得改成你自己的

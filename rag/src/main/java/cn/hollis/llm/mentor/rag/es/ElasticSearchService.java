@@ -1,57 +1,50 @@
 package cn.hollis.llm.mentor.rag.es;
 
+import cn.hollis.llm.mentor.rag.es.EsDocumentChunk;
+import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import co.elastic.clients.elasticsearch._types.Refresh;
+import co.elastic.clients.elasticsearch.core.*;
+import co.elastic.clients.elasticsearch.indices.CreateIndexRequest;
+import co.elastic.clients.elasticsearch.indices.ExistsRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
-import org.elasticsearch.action.bulk.BulkRequest;
-import org.elasticsearch.action.bulk.BulkResponse;
-import org.elasticsearch.action.index.IndexRequest;
-import org.elasticsearch.action.search.SearchRequest;
-import org.elasticsearch.action.search.SearchResponse;
-import org.elasticsearch.client.RequestOptions;
-import org.elasticsearch.client.RestHighLevelClient;
-import org.elasticsearch.client.indices.CreateIndexRequest;
-import org.elasticsearch.client.indices.GetIndexRequest;
-import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.index.query.QueryBuilders;
-import org.elasticsearch.search.builder.SearchSourceBuilder;
-import org.elasticsearch.xcontent.XContentType;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * ElasticSearch 文档管理服务
  *
- * 负责 RAG（检索增强生成）场景下文档数据的索引创建、写入与检索，
- * 核心功能包括：
- * 1. 服务启动时自动检测并初始化索引
- * 2. 支持单条 / 批量文档写入
- * 3. 基于 IK 中文分词器的全文关键词检索
+ * 负责 RAG 场景下文档索引初始化 写入和检索
+ * 主要能力如下
+ * 1 服务启动时自动检查并创建索引
+ * 2 支持单条与批量文档写入
+ * 3 支持基于 IK 分词器的中文关键词检索
  *
- * 采用ik分词器进行分词，写入使用最大粒度分词，查询使用智能分词
- *
+ * 写入阶段使用 ik_max_word 查询阶段默认使用 ik_smart
  */
 @Service
 @Slf4j
 public class ElasticSearchService {
 
     @Autowired
-    private RestHighLevelClient client;
+    private ElasticsearchClient client;
 
-    //JSON 序列化工具
+    // JSON 序列化工具
     private final ObjectMapper mapper = new ObjectMapper();
 
-    //默认索引名
+    // 默认索引名
     private static final String INDEX_NAME = "rag_docs";
 
-    //文本内容字段名
+    // 文本内容字段名
     private static final String FIELD_CONTENT = "content";
 
-    //服务启动后自动检查索引是否存在，不存在则创建
+    // 服务启动后自动检查索引 不存在时创建
     @PostConstruct
     public void init() {
         try {
@@ -71,108 +64,137 @@ public class ElasticSearchService {
      * 分词器使用 IK 并叠加停用词与 lowercase 过滤
      */
     public void createIndex() throws Exception {
-        CreateIndexRequest request = new CreateIndexRequest(INDEX_NAME);
-
-        // 设置索引参数与分析器
-        request.settings(Settings.builder()
-                .put("number_of_shards", 1)
-                .put("number_of_replicas", 0)
-                // 过滤中文常见虚词
-                .put("analysis.filter.my_stop_filter.type", "stop")
-                .put("analysis.filter.my_stop_filter.stopwords", "_chinese_")
-                // ：ik_max（最大粒度分词，用于写入，提升召回）
-                .put("analysis.analyzer.ik_max.type", "custom")
-                .put("analysis.analyzer.ik_max.tokenizer", "ik_max_word")
-                .putList("analysis.analyzer.ik_max.filter", "lowercase", "my_stop_filter")
-                // ik_smart（智能分词，用于查询，提升精准）
-                .put("analysis.analyzer.ik_smart.type", "custom")
-                .put("analysis.analyzer.ik_smart.tokenizer", "ik_smart")
-                .putList("analysis.analyzer.ik_smart.filter", "lowercase", "my_stop_filter")
-        );
-
-        // 设置字段映射
-        // content: 文本内容，使用ik_max分词，同时添加smart字段使用ik_smart分词，查询都是ik_smart
-        String mappingJson = """
+        // 配置索引 settings 与 mappings
+        String settingsAndMappingJson = """
                 {
-                  "properties": {
-                    "id": { "type": "keyword" },
-                    "content": {
-                      "type": "text",
-                      "analyzer": "ik_max",
-                      "search_analyzer": "ik_smart",
-                      "fields": {
-                        "smart": {
-                          "type": "text",
-                          "analyzer": "ik_smart",
-                          "search_analyzer": "ik_smart"
+                  "settings": {
+                    "number_of_shards": 1,
+                    "number_of_replicas": 0,
+                    "analysis": {
+                      "filter": {
+                        "my_stop_filter": {
+                          "type": "stop",
+                          "stopwords": "_chinese_"
+                        }
+                      },
+                      "analyzer": {
+                        "ik_max": {
+                          "type": "custom",
+                          "tokenizer": "ik_max_word",
+                          "filter": ["lowercase", "my_stop_filter"]
+                        },
+                        "ik_smart": {
+                          "type": "custom",
+                          "tokenizer": "ik_smart",
+                          "filter": ["lowercase", "my_stop_filter"]
                         }
                       }
-                    },
-                    "metadata": {
-                      "type": "object",
-                      "properties": {
-                        "source": { "type": "keyword" },
-                        "category": { "type": "keyword" },
-                        "orderId": { "type": "keyword" }
+                    }
+                  },
+                  "mappings": {
+                    "properties": {
+                      "id": { "type": "keyword" },
+                      "content": {
+                        "type": "text",
+                        "analyzer": "ik_max",
+                        "search_analyzer": "ik_smart",
+                        "fields": {
+                          "smart": {
+                            "type": "text",
+                            "analyzer": "ik_smart",
+                            "search_analyzer": "ik_smart"
+                          }
+                        }
+                      },
+                      "metadata": {
+                        "type": "object",
+                        "properties": {
+                          "source": { "type": "keyword" },
+                          "category": { "type": "keyword" },
+                          "orderId": { "type": "keyword" }
+                        }
                       }
                     }
                   }
                 }
                 """;
-        request.mapping(mappingJson, XContentType.JSON);
 
-        // 执行创建
-        client.indices().create(request, RequestOptions.DEFAULT);
+        CreateIndexRequest request = CreateIndexRequest.of(b -> b
+                .index(INDEX_NAME)
+                .withJson(new StringReader(settingsAndMappingJson))
+        );
+
+        // 执行索引创建
+        client.indices().create(request);
     }
 
-    //单条写入文档
+    /**
+     * 单条写入
+     */
     public void indexSingle(EsDocumentChunk doc) throws Exception {
         if (doc == null || doc.getId() == null) {
             throw new IllegalArgumentException("Document or ID cannot be null");
         }
 
-        IndexRequest request = new IndexRequest(INDEX_NAME)
-                .id(doc.getId())
-                .source(mapper.writeValueAsString(doc), XContentType.JSON)
-                .setRefreshPolicy("true");
+        String docJson = mapper.writeValueAsString(doc);
 
-        client.index(request, RequestOptions.DEFAULT);
+        IndexRequest<EsDocumentChunk> request = IndexRequest.of(b -> b
+                .index(INDEX_NAME)
+                .id(doc.getId())
+                .withJson(new StringReader(docJson))
+                .refresh(Refresh.True)
+        );
+
+        client.index(request);
         log.debug("Indexed doc id={}", doc.getId());
     }
 
-    //批量写入文档
+    /**
+     * 批量写入
+     */
     public void bulkIndex(List<EsDocumentChunk> docs) throws Exception {
         if (docs == null || docs.isEmpty()) {
             return;
         }
 
-        BulkRequest bulkRequest = new BulkRequest();
+        BulkRequest.Builder bulkBuilder = new BulkRequest.Builder();
 
         for (EsDocumentChunk doc : docs) {
-            // 使用业务 ID 作为 ES 文档 ID
-            bulkRequest.add(new IndexRequest(INDEX_NAME)
-                    .id(doc.getId())
-                    .source(mapper.writeValueAsString(doc), XContentType.JSON));
+            bulkBuilder.operations(op -> op
+                    .index(idx -> idx
+                            .index(INDEX_NAME)
+                            .id(doc.getId())
+                            .document(doc)
+                    )
+            );
         }
 
-        bulkRequest.setRefreshPolicy("true");
+        bulkBuilder.refresh(Refresh.True);
 
-        BulkResponse response = client.bulk(bulkRequest, RequestOptions.DEFAULT);
-        if (response.hasFailures()) {
-            log.error("Bulk indexing completed with failures: {}", response.buildFailureMessage());
+        BulkResponse response = client.bulk(bulkBuilder.build());
+        if (response.errors()) {
+            log.error("Bulk indexing completed with failures");
+            response.items().forEach(item -> {
+                if (item.error() != null) {
+                    log.error("Failed to index doc {}: {}", item.id(), item.error().reason());
+                }
+            });
         } else {
             log.info("Successfully indexed {} documents", docs.size());
         }
     }
 
-    //判断索引是否存在
+    /**
+     * 判断索引是否存在
+     */
     public boolean indexExists(String indexName) throws IOException {
-        return client.indices().exists(new GetIndexRequest(indexName), RequestOptions.DEFAULT);
+        ExistsRequest request = ExistsRequest.of(b -> b.index(indexName));
+        return client.indices().exists(request).value();
     }
 
     /**
      * 中文关键词检索
-     * 默认返回 5 条并使用 content 字段
+     * 默认返回前 5 条并使用 content 字段
      */
     public List<EsDocumentChunk> searchByKeyword(String keyword) throws Exception {
         return searchByKeyword(keyword, 5, false);
@@ -180,27 +202,28 @@ public class ElasticSearchService {
 
     /**
      * 中文关键词检索
-     * 可切换 content 与 content.smart 字段
+     * useSmartAnalyzer 为 true 时走 content.smart 字段
      */
     public List<EsDocumentChunk> searchByKeyword(String keyword, int size, boolean useSmartAnalyzer) throws Exception {
-        SearchRequest request = new SearchRequest(INDEX_NAME);
-        SearchSourceBuilder builder = new SearchSourceBuilder();
-
-        // smart 字段使用 ik_smart 分词
         String field = useSmartAnalyzer ? FIELD_CONTENT + ".smart" : FIELD_CONTENT;
-        builder.query(QueryBuilders.matchQuery(field, keyword));
-        builder.size(size);
 
-        request.source(builder);
+        SearchRequest request = SearchRequest.of(b -> b
+                .index(INDEX_NAME)
+                .query(q -> q
+                        .match(m -> m
+                                .field(field)
+                                .query(keyword)
+                        )
+                )
+                .size(size)
+        );
 
-        SearchResponse response = client.search(request, RequestOptions.DEFAULT);
+        SearchResponse<EsDocumentChunk> response = client.search(request, EsDocumentChunk.class);
 
         List<EsDocumentChunk> result = new ArrayList<>();
-        response.getHits().forEach(hit -> {
-            try {
-                result.add(mapper.readValue(hit.getSourceAsString(), EsDocumentChunk.class));
-            } catch (Exception e) {
-                log.warn("Failed to convert ES hit to EsDocumentChunk", e);
+        response.hits().hits().forEach(hit -> {
+            if (hit.source() != null) {
+                result.add(hit.source());
             }
         });
 

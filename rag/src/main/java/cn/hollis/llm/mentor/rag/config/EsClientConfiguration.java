@@ -1,5 +1,10 @@
 package cn.hollis.llm.mentor.rag.config;
 
+import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import co.elastic.clients.json.jackson.JacksonJsonpMapper;
+import co.elastic.clients.transport.ElasticsearchTransport;
+import co.elastic.clients.transport.rest_client.RestClientTransport;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.http.HttpHost;
 import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.UsernamePasswordCredentials;
@@ -9,7 +14,6 @@ import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.ssl.SSLContexts;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestClientBuilder;
-import org.elasticsearch.client.RestHighLevelClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,33 +24,26 @@ import org.springframework.context.annotation.Lazy;
 import javax.net.ssl.SSLContext;
 
 @Configuration
+@Slf4j
 public class EsClientConfiguration {
 
-    private static final Logger logger = LoggerFactory.getLogger(EsClientConfiguration.class);
+    @Value("${spring.elasticsearch.uris}")
+    private String uris;
 
-    @Value("${elasticsearch.host}")
-    private String host;
-
-    @Value("${elasticsearch.port}")
-    private int port;
-
-    @Value("${elasticsearch.scheme:https}")
-    private String scheme;
-
-    @Value("${elasticsearch.username:}")
+    @Value("${spring.elasticsearch.username:}")
     private String username;
 
-    @Value("${elasticsearch.password:}")
+    @Value("${spring.elasticsearch.password:}")
     private String password;
 
-    @Value("${elasticsearch.insecure:false}")
+    @Value("${spring.elasticsearch.insecure:false}")
     private boolean insecure;
 
     @Bean
     @Lazy
-    public RestHighLevelClient restHighLevelClient() {
+    public ElasticsearchClient elasticsearchClient() {
         try {
-            RestClientBuilder builder = RestClient.builder(new HttpHost(host, port, scheme));
+            RestClientBuilder builder = RestClient.builder(HttpHost.create(uris));
 
             // 如果需要 Basic Auth，配置 CredentialsProvider
             if (username != null && !username.isEmpty()) {
@@ -56,7 +53,7 @@ public class EsClientConfiguration {
                 builder.setHttpClientConfigCallback(httpClientBuilder -> {
                     httpClientBuilder.setDefaultCredentialsProvider(credentialsProvider);
                     // 如果是 https 且 insecure=true，继续设置 SSLContext 和 HostnameVerifier
-                    if ("https".equalsIgnoreCase(scheme) && insecure) {
+                    if (uris.startsWith("https") && insecure) {
                         try {
                             SSLContext sslContext = SSLContexts.custom()
                                     .loadTrustMaterial(null, (chain, authType) -> true) // trust all
@@ -72,7 +69,7 @@ public class EsClientConfiguration {
                 });
             } else {
                 // 没有用户名，仅设置 insecure SSL（如果需要）
-                if ("https".equalsIgnoreCase(scheme) && insecure) {
+                if (uris.startsWith("https") && insecure) {
                     builder.setHttpClientConfigCallback(httpClientBuilder -> {
                         try {
                             SSLContext sslContext = SSLContexts.custom()
@@ -89,9 +86,11 @@ public class EsClientConfiguration {
                 }
             }
 
-            return new RestHighLevelClient(builder);
+            RestClient restClient = builder.build();
+            ElasticsearchTransport transport = new RestClientTransport(restClient, new JacksonJsonpMapper());
+            return new ElasticsearchClient(transport);
         } catch (Exception e) {
-            logger.warn("Failed to create Elasticsearch client: {}. ES functionality will be unavailable.", e.getMessage());
+            log.warn("Failed to create Elasticsearch client: {}. ES functionality will be unavailable.", e.getMessage());
             return null;
         }
     }
