@@ -1,4 +1,4 @@
-package cn.hollis.llm.mentor.agent.controller;
+package cn.hollis.llm.mentor.agent.graph.controller;
 
 import cn.hollis.llm.mentor.agent.graph.ResearchAssistantGraphService;
 import org.springframework.util.StringUtils;
