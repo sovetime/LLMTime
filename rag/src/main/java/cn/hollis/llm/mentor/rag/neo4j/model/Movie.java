@@ -10,4 +10,20 @@ public class Movie {
 
     private int year;
 
+    public Movie() {
+    }
+
+    public Movie(String title, int year) {
+        this.title = title;
+        this.year = year;
+    }
+
+    // Getters
+    public String getTitle() {
+        return title;
+    }
+
+    public int getYear() {
+        return year;
+    }
 }

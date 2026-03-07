@@ -1,5 +1,8 @@
 package cn.hollis.llm.mentor.rag.splitter;
 
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.Setter;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.transformer.splitter.TextSplitter;
 
@@ -12,31 +15,24 @@ import java.util.stream.Collectors;
  */
 public class MarkdownHeaderTextSplitter extends TextSplitter {
 
-    /** 需要分割的标题列表，按标题标记长度倒序排列 */
+    //需要分割的标题列表，按标题标记长度倒序排列
     private List<Map.Entry<String, String>> headersToSplitOn;
 
-    /** 是否按行返回结果 */
+    //是否按行返回结果
     private boolean returnEachLine;
 
-    /** 是否剥离标题行本身 */
+    //是否剥离标题行本身
     private boolean stripHeaders;
 
-    /** 是否启用父子分段模式 */
+    //是否启用父子分段模式
     private boolean parentChildModel;
 
-    /**
-     * 构造函数
-     *
-     * @param headersToSplitOn 标题分割映射表，key为标题标记（如"#"、"##"），value为元数据中的键名
-     * @param returnEachLine 是否按行返回结果，false时会聚合相同元数据的行
-     * @param stripHeaders 是否在结果中移除标题行
-     * @param parentChildModel 是否启用父子分段模式，启用后会在元数据中添加parentChunkId
-     */
     public MarkdownHeaderTextSplitter(Map<String, String> headersToSplitOn, boolean returnEachLine, boolean stripHeaders, boolean parentChildModel) {
         // 按标题标记长度倒序排列，确保优先匹配更长的标记（如"###"优先于"##"）
         this.headersToSplitOn = headersToSplitOn.entrySet().stream()
                 .sorted(Comparator.comparingInt(e -> -e.getKey().length()))
                 .collect(Collectors.toList());
+
         this.returnEachLine = returnEachLine;
         this.stripHeaders = stripHeaders;
         this.parentChildModel = parentChildModel;
@@ -265,94 +261,53 @@ public class MarkdownHeaderTextSplitter extends TextSplitter {
     /**
      * 内部类：表示带有元数据的文本行
      */
+    @AllArgsConstructor
+    @Getter
+    @Setter
     public static class Line {
-        /** 文本内容 */
+        /**
+         * 文本内容
+         */
         private String content;
-        /** 元数据信息 */
+
+        /**
+         * 元数据信息
+         */
         private Map<String, Object> metadata;
-
-        public Line(String content, Map<String, Object> metadata) {
-            this.content = content;
-            this.metadata = metadata;
-        }
-
-        public String getContent() {
-            return content;
-        }
-
-        public void setContent(String content) {
-            this.content = content;
-        }
-
-        public Map<String, Object> getMetadata() {
-            return metadata;
-        }
-
-        public void setMetadata(Map<String, Object> metadata) {
-            this.metadata = metadata;
-        }
     }
 
     /**
      * 内部类：表示Markdown标题
      */
+    @Getter
+    @Setter
+    @AllArgsConstructor
     public static class Header {
-        /** 标题级别（1-6） */
+        /**
+         * 标题级别（1-6）
+         */
         private int level;
-        /** 元数据中的键名 */
+
+        /**
+         * 元数据中的键名
+         */
         private String name;
-        /** 标题文本内容（不含#标记） */
+
+        /**
+         * 标题文本内容（不含#标记）
+         */
         private String data;
-
-        public Header(int level, String name, String data) {
-            this.level = level;
-            this.name = name;
-            this.data = data;
-        }
-
-        public int getLevel() {
-            return level;
-        }
-
-        public void setLevel(int level) {
-            this.level = level;
-        }
-
-        public String getName() {
-            return name;
-        }
-
-        public void setName(String name) {
-            this.name = name;
-        }
-
-        public String getData() {
-            return data;
-        }
-
-        public void setData(String data) {
-            this.data = data;
-        }
     }
 
     /**
      * 内部类：携带元数据的文档片段
      */
+    @AllArgsConstructor
+    @Getter
     private static class DocumentWithMetadata {
+
         private final String content;
+
         private final Map<String, Object> metadata;
-
-        public DocumentWithMetadata(String content, Map<String, Object> metadata) {
-            this.content = content;
-            this.metadata = new HashMap<>(metadata);
-        }
-
-        public String getContent() {
-            return content;
-        }
-
-        public Map<String, Object> getMetadata() {
-            return metadata;
-        }
     }
 }

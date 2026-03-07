@@ -17,7 +17,6 @@ import java.util.List;
 @RequestMapping("/rag/es")
 public class RagEsController {
 
-
     @Autowired
     private DocumentReaderFactory selector;
 

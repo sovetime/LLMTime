@@ -5,13 +5,11 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.transformer.splitter.TextSplitter;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 
 
 //固定大小切分
-//自定义重叠段落切分器
+//自定义重叠段落切分器，使用滑动窗口
 //SpringAI 官方没有提供重叠机制
 public class OverlapParagraphTextSplitter extends TextSplitter {
 
@@ -36,8 +34,9 @@ public class OverlapParagraphTextSplitter extends TextSplitter {
     }
 
     //将长文本按照固定大小切分为多个文本块，支持块间重叠以保留上下文语义
-    //以换行符为段落边界，逐段填充当前块<
+    //以换行符为段落边界，逐段填充当前块
     //当前块达到 {@code chunkSize} 时保存，并将末尾 {@code overlap} 个字符作为下一块的起始内容
+    @Override
     protected List<String> splitText(String text) {
         if (StringUtils.isBlank(text))
             return Collections.emptyList();
@@ -48,8 +47,9 @@ public class OverlapParagraphTextSplitter extends TextSplitter {
         StringBuilder currentChunk = new StringBuilder();
 
         for (String paragraph : paragraphs) {
-            if (StringUtils.isBlank(paragraph))
+            if (StringUtils.isBlank(paragraph)) {
                 continue;
+            }
 
             int start = 0;
             while (start < paragraph.length()) {
@@ -79,8 +79,9 @@ public class OverlapParagraphTextSplitter extends TextSplitter {
             }
         }
 
-        if (currentChunk.length() > 0)
+        if (currentChunk.length() > 0) {
             allChunks.add(currentChunk.toString());
+        }
 
         return allChunks;
     }
