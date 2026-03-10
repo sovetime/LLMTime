@@ -9,9 +9,9 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Lazy;
 
 @Configuration
-public class MinioClientConfiguration {
+public class MinioConfiguration {
 
-    private static final Logger logger = LoggerFactory.getLogger(MinioClientConfiguration.class);
+    private static final Logger logger = LoggerFactory.getLogger(MinioConfiguration.class);
 
     @Value("${minio.endpoint}")
     private String endpoint;
