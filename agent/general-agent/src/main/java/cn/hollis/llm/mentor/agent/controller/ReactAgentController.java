@@ -65,7 +65,6 @@ public class ReactAgentController {
         ChatOptions chatOptions = ToolCallingChatOptions.builder()
                 //指定工具
                 .toolCallbacks(ToolCallbacks.from(new StockTools()))
-//                .model("deepseek-v3")
                 .build();
 
         //定义提示词
@@ -149,12 +148,14 @@ public class ReactAgentController {
     @GetMapping("/chatWithSpringAiAlibaba")
     public String chatWithSpringAiAlibaba(String conversationId) throws GraphRunnerException {
 
+        //构造系统提示词
         String systemPrompt = String.format("你是一个智能助手，你擅长使用工具帮我解决问题。" +
                 "你的工作流程是：" +
                 "1、思考：先根据用户的提问进行思考，推理出下一步需要进行的具体系统" +
                 "2、行动：做具体的行动，这一步可以使用工具" +
                 "3、观察：记录前一步行动的结果。你可以进行多轮思考和行动。如果要使用工具，请务必调用工具，不要自己随便捏造结果。");
 
+        //创建ReactAgent并注册工具
         ReactAgent agent = ReactAgent.builder()
                 .name("executor")
                 .model(chatModel)
@@ -163,12 +164,15 @@ public class ReactAgentController {
                 .saver(new MemorySaver())
                 .build();
 
+        //构造对话配置并绑定会话线程
         RunnableConfig config = RunnableConfig.builder()
                 .threadId(conversationId)
                 .build();
 
+        //发起调用并获取模型回复
         AssistantMessage chatResponse = agent.call("帮我分析最近三个月特斯拉（TSLA）的股价走势，并结合新闻事件解释可能的影响因素。", config);
 
+        //返回文本结果
         return chatResponse.getText();
     }
 

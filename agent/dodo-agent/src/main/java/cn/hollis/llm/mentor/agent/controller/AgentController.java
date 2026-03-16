@@ -168,7 +168,7 @@ public class AgentController implements InitializingBean {
             return Flux.error(e);
         }
     }
-
+    
     @GetMapping("/stop")
     @Operation(summary = "停止Agent执行", description = "停止指定会话的Agent执行，中断底层调用")
     public Map<String, Object> stopAgent(@RequestParam String conversationId) {

@@ -32,8 +32,8 @@ spring:
             weather-sse:
               url: http://127.0.0.1:8003/
               sse-endpoint: sse
-        streamable-http:
-          connections:
-            weather-streamable:
-              url: http://127.0.0.1:8004/stream/test/
-              endpoint: api/mcp
+#        streamable-http:
+#          connections:
+#            weather-streamable:
+#              url: http://127.0.0.1:8004/stream/test/
+#              endpoint: api/mcp
