@@ -8,7 +8,6 @@ package cn.hollis.llm.mentor.know.engine.infra.snowflake;
  * - 10位工作机器ID（0-1023）
  * - 12位序列号（毫秒内自增，每毫秒可生成4096个ID）
  *
- * @author Hollis
  */
 public class SnowflakeIdGenerator {
 
@@ -74,8 +73,7 @@ public class SnowflakeIdGenerator {
      */
     private SnowflakeIdGenerator(long workerId) {
         if (workerId < 0 || workerId > MAX_WORKER_ID) {
-            throw new IllegalArgumentException(
-                    String.format("workerId must be between 0 and %d", MAX_WORKER_ID));
+            throw new IllegalArgumentException(String.format("workerId must be between 0 and %d", MAX_WORKER_ID));
         }
         this.workerId = workerId;
     }
@@ -129,7 +127,7 @@ public class SnowflakeIdGenerator {
         if (timestamp < lastTimestamp) {
             throw new RuntimeException(
                     String.format("Clock moved backwards. Refusing to generate id for %d milliseconds",
-                            lastTimestamp - timestamp));
+                        lastTimestamp - timestamp));
         }
 
         // 同一毫秒内

@@ -1,6 +1,7 @@
 package cn.hollis.llm.mentor.know.engine.document.config;
 
 import io.minio.MinioClient;
+import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -9,9 +10,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Lazy;
 
 @Configuration
+@Slf4j
 public class MinioConfiguration {
-
-    private static final Logger logger = LoggerFactory.getLogger(MinioConfiguration.class);
 
     @Value("${minio.endpoint}")
     private String endpoint;
@@ -31,7 +31,7 @@ public class MinioConfiguration {
                     .credentials(accessKey, secretKey)
                     .build();
         } catch (Exception e) {
-            logger.warn("Failed to create MinIO client: {}. MinIO functionality will be unavailable.", e.getMessage());
+            log.warn("Failed to create MinIO client: {}. MinIO functionality will be unavailable.", e.getMessage());
             return null;
         }
     }
