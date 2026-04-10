@@ -27,6 +27,7 @@
         <module>agent/general-agent</module>
         <module>function-call</module>
         <module>langchain4j</module>
+        <module>know-engine</module>
         <module>agent/dodo-agent</module>
     </modules>
 
