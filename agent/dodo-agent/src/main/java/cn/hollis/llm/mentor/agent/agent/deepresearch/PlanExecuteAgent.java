@@ -253,11 +253,6 @@ public class PlanExecuteAgent extends BaseAgent {
             currentSessionId = savedSession.getId();
         }
 
-        // 添加到记忆
-        if (conversationId != null && chatMemory != null) {
-            chatMemory.add(conversationId, new UserMessage(question));
-        }
-
         return state;
     }
 
@@ -320,7 +315,7 @@ public class PlanExecuteAgent extends BaseAgent {
      */
     private void handleCancel(Sinks.Many<String> sink, AtomicBoolean finished) {
         finished.set(true);
-        sink.tryEmitNext("{\"type\":\"text\",\"content\":\"⏹ 用户已停止生成\\n\"}");
+        taskManager.stopTask(currentConversationId);
     }
 
     /**
@@ -336,7 +331,7 @@ public class PlanExecuteAgent extends BaseAgent {
         saveSessionResult(conversationId, finalAnswerBuffer, thinkingBuffer);
 
         // 移除任务
-        removeTask(conversationId);
+        taskManager.stopTask(conversationId);
 
         // 清理资源
         cleanupResources(finished);
@@ -362,6 +357,9 @@ public class PlanExecuteAgent extends BaseAgent {
         emit(sink, finished, "\n🔍 正在分析您的需求...\n", "thinking", thinkingBuffer);
 
         List<Message> messages = new ArrayList<>();
+        // 先注入时间信息
+        messages.add(new SystemMessage(PlanExecutePrompts.getCurrentTime()));
+        // 再注入提示词
         messages.add(new SystemMessage(PlanExecutePrompts.REQUIREMENT_CLARIFICATION));
         messages.addAll(state.getMessages());
 
@@ -414,6 +412,9 @@ public class PlanExecuteAgent extends BaseAgent {
         emit(sink, finished, "📝 正在生成研究主题...\n", "thinking", thinkingBuffer);
 
         List<Message> messages = new ArrayList<>();
+        // 先注入时间信息
+        messages.add(new SystemMessage(PlanExecutePrompts.getCurrentTime()));
+        // 再注入提示词
         messages.add(new SystemMessage(PlanExecutePrompts.RESEARCH_TOPIC_GENERATION));
 
         // 添加历史消息和对话上下文
@@ -481,7 +482,7 @@ public class PlanExecuteAgent extends BaseAgent {
     private void handleExecutionError(Throwable e, Sinks.Many<String> sink, AtomicBoolean finished) {
         // 检查是否是中断导致的异常
         if (compositeDisposable.isDisposed() || Thread.currentThread().isInterrupted()
-            || (e.getMessage() != null && e.getMessage().contains("interrupted"))) {
+                || (e.getMessage() != null && e.getMessage().contains("interrupted"))) {
             log.info("PlanExecuteAgent 执行被用户停止: {}", e.getMessage());
         } else {
             log.error("PlanExecuteAgent execute error", e);
@@ -552,7 +553,7 @@ public class PlanExecuteAgent extends BaseAgent {
     }
 
     /**
-     * 发送响应并收集到思考缓冲区（用于某些特殊场景）
+     * 发送响应
      */
     private void emit(Sinks.Many<String> sink,
                       AtomicBoolean finished,
@@ -563,13 +564,7 @@ public class PlanExecuteAgent extends BaseAgent {
         if (finished.get()) {
             return;
         }
-
         sink.tryEmitNext(createResponse(content, type));
-
-        // 如果是 thinking 类型，同时收集到 thinkingBuffer
-        if ("thinking".equals(type) && thinkingBuffer != null) {
-            thinkingBuffer.append(content);
-        }
     }
 
     private void complete(Sinks.Many<String> sink,
@@ -630,10 +625,6 @@ public class PlanExecuteAgent extends BaseAgent {
                         return;
                     }
 
-                    state.addRound(new PlanRoundState(
-                            state.getRound(), plan, results, critique
-                    ));
-
                     if (critique.passed()) {
                         break;
                     }
@@ -656,7 +647,7 @@ public class PlanExecuteAgent extends BaseAgent {
             } catch (Exception e) {
                 // 检查是否是dispose导致的异常
                 if (compositeDisposable.isDisposed() || Thread.currentThread().isInterrupted()
-                    || (e.getMessage() != null && e.getMessage().contains("interrupted"))) {
+                        || (e.getMessage() != null && e.getMessage().contains("interrupted"))) {
                     log.info("PlanExecuteAgent 执行被用户停止: {}", e.getMessage());
                     // 发送停止消息
                     sink.tryEmitNext("{\"type\":\"text\",\"content\":\"⏹ 用户已停止生成\\n\"}");
@@ -675,18 +666,33 @@ public class PlanExecuteAgent extends BaseAgent {
         });
 
         Prompt prompt = new Prompt(List.of(
-                new SystemMessage("""
-                                              当前是迭代的第 %s 轮次。
-                                          
-                                              ## 可用工具说明（仅用于规划参考）
-                                              %s
-                                          
-                                              ## 输出format
-                                              %s
-                                          
-                                          """.formatted(state.getRound(), toolDesc, converter.getFormat())
-                                  + PlanExecutePrompts.PLAN),
-                new UserMessage(buildPlanUserMessage(state))
+                new SystemMessage(PlanExecutePrompts.getCurrentTime()),
+                new SystemMessage(PlanExecutePrompts.PLAN + """
+                                                ## 当前上下文
+                                                当前轮次: %s
+
+                                                ## 可用工具说明（仅用于规划参考）
+                                                %s
+
+                                                ## 输出格式
+                                                %s
+                        """.formatted(state.getRound(), toolDesc, converter.getFormat())),
+                new UserMessage("""
+                        【研究主题】
+                        %s
+
+                        【对话历史】
+                        %s
+
+                        ## 重要约束
+                        如果会话历史中存在【Critique Feedback】，你必须：
+                        1. 仔细分析反馈中指出的不足
+                        2. 新的计划必须直接解决这些问题
+                        3. 不要重复之前失败的尝试
+                        """.formatted(
+                        state.getRefinedResearchTopic() != null ? state.getRefinedResearchTopic() : state.getQuestion(),
+                        state.renderFullContext()
+                ))
         ));
 
         // 只输出状态，不流式输出计划内容
@@ -716,37 +722,6 @@ public class PlanExecuteAgent extends BaseAgent {
         return planTasks;
     }
 
-    /**
-     * 构建规划阶段的用户消息
-     * 上下文：用户问题 + 研究主题（仅第一轮）+ 上一轮评估反馈（增量模式）
-     */
-    private String buildPlanUserMessage(OverAllState state) {
-        StringBuilder userMessage = new StringBuilder();
-
-        // 1. 添加用户原始问题
-        userMessage.append("【用户问题】\n");
-        userMessage.append(state.getQuestion());
-
-        // 2. 先检查是否有上一轮批判未通过的情况
-        boolean hasPreviousCritique = false;
-        if (!state.getRounds().isEmpty()) {
-            PlanRoundState lastRound = state.getRounds().get(state.getRounds().size() - 1);
-            if (lastRound != null && lastRound.critique() != null && !lastRound.critique().passed()) {
-                hasPreviousCritique = true;
-                userMessage.append("\n\n【上一轮评估反馈】\n");
-                userMessage.append(lastRound.critique().feedback());
-            }
-        }
-
-        // 3. 只有在没有上一轮批判时，才添加研究主题（增量模式）
-        if (!hasPreviousCritique && state.getRefinedResearchTopic() != null && !state.getRefinedResearchTopic().isEmpty()) {
-            userMessage.append("\n\n【研究主题】\n");
-            userMessage.append(state.getRefinedResearchTopic());
-        }
-
-        return userMessage.toString();
-    }
-
     private Map<String, TaskResult> executePlan(List<PlanTask> plan, OverAllState state, Sinks.Many<String> sink,
                                                 AtomicBoolean hasSentFinal, StringBuilder thinkingBuffer) {
 
@@ -774,24 +749,23 @@ public class PlanExecuteAgent extends BaseAgent {
             for (PlanTask task : tasks) {
                 // 使用Mono包装任务执行
                 Disposable taskDisposable = Mono.fromRunnable(() -> {
+                            boolean acquired = false;
                             try {
                                 // 检查是否已被停止
                                 if (compositeDisposable.isDisposed()) {
-                                    latch.countDown();
                                     return;
                                 }
 
                                 // 获取执行许可
                                 toolSemaphore.acquire();
+                                acquired = true;
+
                                 if (task == null || task.id() == null || task.id().isEmpty()) {
-                                    latch.countDown();
                                     return;
                                 }
 
                                 // 再次检查，避免在acquire后被停止
                                 if (compositeDisposable.isDisposed()) {
-                                    toolSemaphore.release();
-                                    latch.countDown();
                                     return;
                                 }
 
@@ -802,21 +776,20 @@ public class PlanExecuteAgent extends BaseAgent {
                                     accumulatedResults.put(task.id(), result.output());
                                 }
 
-                                state.add(new AssistantMessage("""
-                                        【Completed Task Result】
-                                        taskId: %s
-                                        success: %s
-                                        result:
-                                        %s
-                                        error:
-                                        %s
-                                        【End Task Result】
-                                        """.formatted(
-                                        task.id(),
-                                        result.success(),
-                                        result.output(),
-                                        result.error()
-                                )));
+                                // 构建任务结果消息，只在有错误时才显示 error
+                                StringBuilder resultMessage = new StringBuilder();
+                                resultMessage.append("【Completed Task Result】\n");
+                                resultMessage.append("taskId: ").append(task.id()).append("\n");
+                                resultMessage.append("success: ").append(result.success()).append("\n");
+                                if (result.output() != null) {
+                                    resultMessage.append("result:\n").append(result.output()).append("\n");
+                                }
+                                if (result.error() != null) {
+                                    resultMessage.append("error:\n").append(result.error()).append("\n");
+                                }
+                                resultMessage.append("【End Task Result】");
+
+                                state.add(new AssistantMessage(resultMessage.toString()));
 
                             } catch (InterruptedException e) {
                                 log.info("Task {} 执行被中断", task.id());
@@ -832,7 +805,7 @@ public class PlanExecuteAgent extends BaseAgent {
                             } catch (Exception e) {
                                 // 检查是否是中断导致的异常
                                 if (compositeDisposable.isDisposed() || Thread.currentThread().isInterrupted()
-                                    || (e.getMessage() != null && e.getMessage().contains("interrupted"))) {
+                                        || (e.getMessage() != null && e.getMessage().contains("interrupted"))) {
                                     log.info("Task {} 执行被用户停止: {}", task.id(), e.getMessage());
                                     results.put(task.id(),
                                             new TaskResult(
@@ -853,7 +826,9 @@ public class PlanExecuteAgent extends BaseAgent {
                                 }
                             } finally {
                                 // 释放许可
-                                toolSemaphore.release();
+                                if (acquired) {
+                                    toolSemaphore.release();
+                                }
                                 latch.countDown();
                             }
                         })
@@ -902,26 +877,24 @@ public class PlanExecuteAgent extends BaseAgent {
         try {
             // 构建完整任务上下文（依赖 + 当前任务指令）
             String fullContext = """
-                    【Available Results】
-                    %s
-                    
-                    【Current Task】
-                    %s
+                                【Available Results】
+                                %s
+                                
+                                【Current Task】
+                                %s
                     """.formatted(
                     dependencyContext,
                     task.instruction()
             );
 
-            // 将SimpleReactAgent.callWithReference()包装成Mono，以便可以被取消
             SimpleReactAgent agent = SimpleReactAgent.builder()
                     .chatModel(chatModel)
                     .tools(tools)
+                    .maxRounds(5)
                     .systemPrompt(PlanExecutePrompts.EXECUTE)
                     .build();
 
-            SimpleReactResult result = Mono.fromCallable(() -> agent.callWithReference(null, fullContext))
-                    .subscribeOn(Schedulers.boundedElastic())
-                    .block();
+            SimpleReactResult result = agent.callWithReference(null, fullContext);
 
             if (compositeDisposable.isDisposed()) {
                 return new TaskResult(task.id(), false, null, "任务被用户停止");
@@ -940,7 +913,7 @@ public class PlanExecuteAgent extends BaseAgent {
         } catch (Exception e) {
             // 检查是否是中断导致的异常
             if (compositeDisposable.isDisposed() || Thread.currentThread().isInterrupted()
-                || (e.getMessage() != null && e.getMessage().contains("interrupted"))) {
+                    || (e.getMessage() != null && e.getMessage().contains("interrupted"))) {
                 log.info("Task {} 执行被用户停止: {}", task.id(), e.getMessage());
                 return new TaskResult(task.id(), false, null, "任务被用户停止");
             }
@@ -1067,6 +1040,7 @@ public class PlanExecuteAgent extends BaseAgent {
 
         String prom = PlanExecutePrompts.CRITIQUE + "\n" + converter.getFormat();
         Prompt prompt = new Prompt(List.of(
+                new SystemMessage(PlanExecutePrompts.getCurrentTime()),
                 new SystemMessage(prom),
                 new UserMessage(userMessage.toString())
         ));
@@ -1098,16 +1072,17 @@ public class PlanExecuteAgent extends BaseAgent {
         }
 
         Prompt prompt = new Prompt(List.of(
+                new SystemMessage(PlanExecutePrompts.getCurrentTime()),
                 new SystemMessage("""
-                                               ## 最大压缩限制（必须遵守）
-                                               - 你输出的最终内容【总字符数（包含所有标签、空格、换行）】
-                                                  不得超过：%s
-                                               - 这是硬性上限，不是建议
-                                               - 如超过该限制，视为压缩失败
-                                          
-                                          """.formatted(contextCharLimit) + PlanExecutePrompts.COMPRESS),
+                        ##最大压缩限制（必须遵守）
+                        -你输出的最终内容【总字符数（包含所有标签、空格、换行）】
+                        不得超过：%s
+                                - 这是硬性上限，不是建议
+                                - 如超过该限制，视为压缩失败
 
-                new UserMessage(renderMessages(state.getMessages()))
+                        """.formatted(contextCharLimit) + PlanExecutePrompts.COMPRESS),
+
+                new UserMessage(state.renderFullContext())
         ));
 
         String snapshot = chatModel.call(prompt)
@@ -1135,16 +1110,17 @@ public class PlanExecuteAgent extends BaseAgent {
         String toolResults = state.extractToolResults();
 
         Prompt prompt = new Prompt(List.of(
+                new SystemMessage(PlanExecutePrompts.getCurrentTime()),
                 new SystemMessage(PlanExecutePrompts.SUMMARIZE),
                 new UserMessage("""
-                        【用户原始问题】
-                        %s
-                        
-                        【研究主题】
-                        %s
-                        
-                        【工具检索结果】
-                        %s
+                                        【用户原始问题】
+                                        %s
+
+                                        【研究主题】
+                                        %s
+
+                                        【工具检索结果】
+                                        %s
                         """.formatted(
                         state.getQuestion(),
                         state.getRefinedResearchTopic() != null ? state.getRefinedResearchTopic() : "未生成研究主题",
@@ -1164,8 +1140,8 @@ public class PlanExecuteAgent extends BaseAgent {
                     }
 
                     if (chunk == null
-                        || chunk.getResult() == null
-                        || chunk.getResult().getOutput() == null) {
+                            || chunk.getResult() == null
+                            || chunk.getResult().getOutput() == null) {
                         return;
                     }
 
@@ -1179,15 +1155,6 @@ public class PlanExecuteAgent extends BaseAgent {
                     emit(sink, finished, text, "text");
                 })
                 .doOnComplete(() -> {
-
-                    if (state.getConversationId() != null
-                        && chatMemory != null
-                        && finalAnswerBuffer.length() > 0) {
-
-                        chatMemory.add(state.getConversationId(),
-                                new AssistantMessage(finalAnswerBuffer.toString()));
-                    }
-
                     // 在 text 输出后，输出参考来源
                     if (!allReferences.isEmpty()) {
                         sink.tryEmitNext(createReferenceResponse(JSON.toJSONString(allReferences)));
@@ -1214,15 +1181,6 @@ public class PlanExecuteAgent extends BaseAgent {
                     .append(": ")
                     .append(tool.getToolDefinition().description())
                     .append("\n");
-        }
-        return sb.toString();
-    }
-
-    private String renderMessages(List<Message> messages) {
-        StringBuilder sb = new StringBuilder();
-        for (Message m : messages) {
-            sb.append("\n\n[").append(m.getMessageType()).append("]\n\n")
-                    .append(m.getText());
         }
         return sb.toString();
     }

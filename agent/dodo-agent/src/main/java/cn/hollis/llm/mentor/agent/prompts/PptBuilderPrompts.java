@@ -195,13 +195,13 @@ public class PptBuilderPrompts {
                 ## 输出格式要求
                 输出JSON格式，结构如下：
                 {
-                  “slides”: [
+                  "slides": [
                     {
-                      “pageType”: “页面类型（大写）”,
-                      “pageDesc”: “页面描述”,
-                      “templatePageIndex”: 模板页码索引,
-                      “data”: {
-                        “字段名”: { ... },
+                      "pageType": "页面类型（大写）",
+                      "pageDesc": "页面描述",
+                      "templatePageIndex": 模板页码索引,
+                      "data": {
+                        "字段名": { ... },
                         ...
                       }
                     }
@@ -210,40 +210,40 @@ public class PptBuilderPrompts {
 
                 ## 字段属性说明（固定格式）
 
-                ### type = “text” （文本字段）
+                ### type = "text" （文本字段）
                 {
-                  “type”: “text”,
-                  “content”: “实际文本内容（字符数必须≤fontLimit）”,
-                  “fontLimit”: 数字
+                  "type": "text",
+                  "content": "实际文本内容（字符数必须≤fontLimit）",
+                  "fontLimit": 数字
                 }
 
                 硬性要求：
-                - type 固定为 “text”
+                - type 固定为 "text"
                 - content 字符数必须 ≤ fontLimit（绝对不允许超过）
                 - 超出视为错误输出
                 - 必须在生成前自行计算字符数
                 - fontLimit 必须与模板Schema完全一致
                 - 中文：1字=1，英文字符/标点/空格/换行=1
 
-                ### type = “image” （图片字段）
+                ### type = "image" （图片字段）
                 {
-                  “type”: “image”,
-                  “content”: “图片生成提示词，描述需要生成什么样的图片”,
-                  “url”: “”（默认传空）
+                  "type": "image",
+                  "content": "图片生成提示词，描述需要生成什么样的图片",
+                  "url": ""（默认传空）
                 }
 
-                - type 固定值为 “image”
+                - type 固定值为 "image"
                 - content：用于文生图的提示词，结合布局要求补充样式描述
                 - url：图片URL地址，用于替换模板中对应图片，默认空字符串
 
-                ### type = “background” （背景字段）
+                ### type = "background" （背景字段）
                 {
-                  “type”: “background”,
-                  “content”: “图片生成提示词，描述需要生成什么样的图片，图片背景一般注重布局，不要带有文字”,
-                  “url”: “”（默认传空）
+                  "type": "background",
+                  "content": "图片生成提示词，描述需要生成什么样的图片，图片背景一般注重布局，不要带有文字",
+                  "url": ""（默认传空）
                 }
 
-                - type 固定值为 “background”
+                - type 固定值为 "background"
                 - content：图片生成提示词，描述需要生成什么样的图片，图片背景一般注重布局，不要带有文字
                 - url：图片URL地址，用于替换模板中对应图片，默认空字符串
 
@@ -260,7 +260,7 @@ public class PptBuilderPrompts {
                    - 违规视为失败
                 8. 内容优先保证不超字，其次再考虑丰富度
                    - 宁可略少字
-                   - 不允许为”更丰富”而超字
+                   - 不允许为"更丰富"而超字
                 9. image类型字段结合布局和风格，尽量生成富化描述，方便文生图
                 10. pageType=CATALOG目录页，根据目录字段数量生成，不多也不少
 
@@ -272,33 +272,33 @@ public class PptBuilderPrompts {
 
                 ## 错误示例（禁止）
                 fontLimit=7
-                content=”人工智能发展趋势”
+                content="人工智能发展趋势"
                 字符数=8 > 7 → 错误输出
                 必须改写为：
-                “人工智能趋势”
+                "人工智能趋势"
 
                 ## 示例（仅供参考，字段名和结构根据模板Schema变化）
                 {
-                  “slides”: [
+                  "slides": [
                     {
-                      “pageType”: “COVER”,
-                      “pageDesc”: “封面页”,
-                      “templatePageIndex”: 1,
-                      “data”: {
-                        “title”: {
-                          “type”: “text”,
-                          “content”: “人工智能技术发展”,
-                          “fontLimit”: 7
+                      "pageType": "COVER",
+                      "pageDesc": "封面页",
+                      "templatePageIndex": 1,
+                      "data": {
+                        "title": {
+                          "type": "text",
+                          "content": "人工智能技术发展",
+                          "fontLimit": 7
                         },
-                        “description”: {
-                          “type”: “text”,
-                          “content”: “探索AI的未来趋势”,
-                          “fontLimit”: 30
+                        "description": {
+                          "type": "text",
+                          "content": "探索AI的未来趋势",
+                          "fontLimit": 30
                         },
-                        “author”: {
-                          “type”: “text”,
-                          “content”: “王大锤”,
-                          “fontLimit”: 10
+                        "author": {
+                          "type": "text",
+                          "content": "王大锤",
+                          "fontLimit": 10
                         }
                       }
                     }

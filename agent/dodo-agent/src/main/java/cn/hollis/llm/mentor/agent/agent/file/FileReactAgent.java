@@ -36,6 +36,7 @@ import reactor.core.scheduler.Schedulers;
 
 import java.io.InputStream;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -165,7 +166,7 @@ public class FileReactAgent extends BaseAgent {
         currentQuestion = question;
 
         // 添加记忆并保存到数据库
-        if (useMemory && sessionService != null) {
+        if (sessionService != null) {
             // 保存用户问题到数据库，关联fileid
             AiSession savedSession = sessionService.saveQuestion(
                     SaveQuestionRequest.builder()
@@ -175,9 +176,6 @@ public class FileReactAgent extends BaseAgent {
                             .build()
             );
             currentSessionId = savedSession.getId();
-            chatMemory.add(conversationId, new UserMessage(question));
-        } else if (useMemory) {
-            chatMemory.add(conversationId, new UserMessage(question));
         }
 
         // 迭代轮次
@@ -213,7 +211,9 @@ public class FileReactAgent extends BaseAgent {
                 })
                 .doOnCancel(() -> {
                     hasSentFinalResult.set(true);
-                    removeTask(conversationId);
+                    if(taskManager != null){
+                        taskManager.stopTask(conversationId);
+                    }
                 })
                 .doFinally(signalType -> {
                     log.info("最终答案: {}", finalAnswerBuffer);
@@ -223,7 +223,9 @@ public class FileReactAgent extends BaseAgent {
                     saveSessionResult(conversationId, finalAnswerBuffer, thinkingBuffer);
 
                     // 流结束时移除任务
-                    removeTask(conversationId);
+                    if(taskManager != null){
+                        taskManager.stopTask(conversationId);
+                    }
                 });
     }
 
@@ -430,10 +432,8 @@ public class FileReactAgent extends BaseAgent {
                     sink.tryEmitNext(recommendJson);
                 }
             }
-
-            if (useMemory) {
-                chatMemory.add(conversationId, new AssistantMessage(finalText));
-            }
+            sink.tryEmitComplete();
+            hasSentFinalResult.set(true);
             return;
         }
 
@@ -521,10 +521,6 @@ public class FileReactAgent extends BaseAgent {
                         }
                     }
 
-                    if (useMemory) {
-                        chatMemory.add(conversationId, new AssistantMessage(finalText));
-                    }
-
                     hasSentFinalResult.set(true);
                     sink.tryEmitComplete();
                 })
@@ -545,10 +541,13 @@ public class FileReactAgent extends BaseAgent {
         AtomicInteger completedCount = new AtomicInteger(0);
         int totalToolCalls = toolCalls.size();
 
+        // 保证顺序一致性
+        Map<String, ToolResponseMessage.ToolResponse> responseMap = new ConcurrentHashMap<>();
+
         for (AssistantMessage.ToolCall tc : toolCalls) {
             Schedulers.boundedElastic().schedule(() -> {
                 if (hasSentFinalResult.get()) {
-                    completeToolCall(completedCount, totalToolCalls, onComplete);
+                    completeToolCall(completedCount, totalToolCalls, responseMap, toolCalls, messages, onComplete);
                     return;
                 }
 
@@ -557,8 +556,10 @@ public class FileReactAgent extends BaseAgent {
 
                 ToolCallback callback = findTool(toolName);
                 if (callback == null) {
-                    addErrorToolResponse(messages, tc, "工具未找到：" + toolName);
-                    completeToolCall(completedCount, totalToolCalls, onComplete);
+                    // 工具未找到时，也放入 responseMap
+                    responseMap.put(tc.id(), new ToolResponseMessage.ToolResponse(
+                            tc.id(), toolName, "{ \"error\": \"工具未找到：" + toolName + "\" }"));
+                    completeToolCall(completedCount, totalToolCalls, responseMap, toolCalls, messages, onComplete);
                     return;
                 }
 
@@ -573,27 +574,50 @@ public class FileReactAgent extends BaseAgent {
 
                 try {
                     Object result = callback.call(argsJson);
-                    ToolResponseMessage.ToolResponse tr = new ToolResponseMessage.ToolResponse(
-                            tc.id(), toolName, result.toString());
-                    messages.add(ToolResponseMessage.builder()
-                            .responses(List.of(tr))
-                            .build());
+                    String resultStr = result.toString();
 
                     // 记录使用的工具
                     recordUsedTool(toolName);
 
+                    // 将结果放入 responseMap，key 为 toolCall.id()
+                    responseMap.put(tc.id(), new ToolResponseMessage.ToolResponse(
+                            tc.id(), toolName, resultStr));
                 } catch (Exception ex) {
-                    addErrorToolResponse(messages, tc, "工具执行失败：" + ex.getMessage());
+                    // 工具执行失败时，也放入 responseMap
+                    responseMap.put(tc.id(), new ToolResponseMessage.ToolResponse(
+                            tc.id(), toolName, "{ \"error\": \"工具执行失败：" + ex.getMessage() + "\" }"));
                 } finally {
-                    completeToolCall(completedCount, totalToolCalls, onComplete);
+                    completeToolCall(completedCount, totalToolCalls, responseMap, toolCalls, messages, onComplete);
                 }
             });
         }
     }
 
-    private void completeToolCall(AtomicInteger completedCount, int total, Runnable onComplete) {
+    private void completeToolCall(AtomicInteger completedCount, int total,
+                                  Map<String, ToolResponseMessage.ToolResponse> responseMap,
+                                  List<AssistantMessage.ToolCall> originalToolCalls,
+                                  List<Message> messages,
+                                  Runnable onComplete) {
         int current = completedCount.incrementAndGet();
         if (current >= total) {
+            // 按原始 toolCalls 的顺序重组结果
+            List<ToolResponseMessage.ToolResponse> sortedResponses = new ArrayList<>();
+            for (AssistantMessage.ToolCall tc : originalToolCalls) {
+                ToolResponseMessage.ToolResponse response = responseMap.get(tc.id());
+                if (response != null) {
+                    sortedResponses.add(response);
+                } else {
+                    // 如果某个工具调用没有响应，添加一个错误响应
+                    sortedResponses.add(new ToolResponseMessage.ToolResponse(
+                            tc.id(), tc.name(), "{ \"error\": \"工具响应丢失\" }"));
+                }
+            }
+
+            // 一次性添加所有工具响应（按原始顺序）
+            messages.add(ToolResponseMessage.builder()
+                    .responses(sortedResponses)
+                    .build());
+
             onComplete.run();
         }
     }

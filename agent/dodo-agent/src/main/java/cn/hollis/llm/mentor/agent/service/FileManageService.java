@@ -125,18 +125,23 @@ public class FileManageService {
 
             // 根据文件类型进行不同的处理
             if (isTextFile(fileType)) {
-                // 文本文件：调用FileParserService解析
                 try {
-                    String extractedText = fileParserService.parseFile(file);
+                    var parseResult = fileParserService.parseFile(file);
+                    String fullText = parseResult.getFullText();
+                    String extractedText = parseResult.getTruncatedText();
+
+                    log.info("文件解析完成: fileId={}, 全量文本长度: {}, 截断后长度: {}",
+                            fileId, fullText.length(), extractedText.length());
+
+                    // 存储截断后的文本用于展示
                     fileInfo.setExtractedText(extractedText);
                     fileInfoService.updateFileInfo(fileInfo);
-                    log.info("文件解析完成: fileId={}, 文本长度: {}", fileId, extractedText.length());
 
-                    // 判断是否为大文件，如果是则进行向量化
-                    if (isLargeFile(extractedText)) {
-                        log.info("检测到大文件，开始向量化处理: fileId={}, 文本长度: {}", fileId, extractedText.length());
+                    // 判断是否为大文件，如果是则使用全量文本进行向量化
+                    if (isLargeFile(fullText)) {
+                        log.info("检测到大文件，开始向量化处理: fileId={}, 全量文本长度: {}", fileId, fullText.length());
                         try {
-                            processLargeFileEmbedding(fileId, extractedText);
+                            processLargeFileEmbedding(fileId, fullText);
                             fileInfo.setEmbed(1);
                             fileInfoService.updateFileInfo(fileInfo);
                             log.info("大文件向量化完成: fileId={}", fileId);

@@ -1,5 +1,7 @@
 package cn.hollis.llm.mentor.agent.service;
 
+import lombok.AllArgsConstructor;
+import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
@@ -51,9 +53,38 @@ public class FileParserService {
      * 解析上传的文件并返回文本内容
      *
      * @param file 上传的文件
-     * @return 解析后的文本内容
+     * @return 解析结果（包含全量文本和截断文本）
      */
-    public String parseFile(MultipartFile file) {
+    public ParseResult parseFile(MultipartFile file) {
+        String fullText = parseFileInternal(file);
+        String truncatedText = truncateIfNeeded(fullText);
+        return new ParseResult(fullText, truncatedText);
+    }
+
+    /**
+     * 文件解析结果
+     */
+    @Data
+    @AllArgsConstructor
+    public static class ParseResult {
+        /**
+         * 全量文本
+         */
+        private String fullText;
+
+        /**
+         * 截断文本
+         */
+        private String truncatedText;
+    }
+
+    /**
+     * 内部方法：解析文件并返回完整文本内容
+     *
+     * @param file 上传的文件
+     * @return 解析后的完整文本内容
+     */
+    private String parseFileInternal(MultipartFile file) {
         String fileType = getFileType(file.getOriginalFilename());
         long fileSize = file.getSize();
 
@@ -77,18 +108,26 @@ public class FileParserService {
                     throw new IllegalArgumentException("不支持的文件类型: " + fileType);
             }
 
-            // 限制文本长度
-            if (content.length() > MAX_TEXT_LENGTH) {
-                log.warn("文件内容过长，将截断至 {} 字符", MAX_TEXT_LENGTH);
-                content = content.substring(0, MAX_TEXT_LENGTH) + "\n\n... (内容已截断，文件过长)";
-            }
-
             log.info("文件解析完成，内容长度: {} 字符", content.length());
             return content;
         } catch (Exception e) {
             log.error("文件解析失败: {}", file.getOriginalFilename(), e);
             throw new RuntimeException("文件解析失败: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * 如果需要则截断文本
+     *
+     * @param content 原始文本内容
+     * @return 截断后的文本内容
+     */
+    private String truncateIfNeeded(String content) {
+        if (content.length() > MAX_TEXT_LENGTH) {
+            log.warn("文件内容过长，将截断至 {} 字符", MAX_TEXT_LENGTH);
+            return content.substring(0, MAX_TEXT_LENGTH) + "\n\n... (内容已截断，文件过长)";
+        }
+        return content;
     }
 
     /**

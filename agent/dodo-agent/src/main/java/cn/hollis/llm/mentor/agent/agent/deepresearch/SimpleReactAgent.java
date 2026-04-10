@@ -4,6 +4,7 @@ import cn.hollis.llm.mentor.agent.entity.record.AgentState;
 import cn.hollis.llm.mentor.agent.entity.record.RoundMode;
 import cn.hollis.llm.mentor.agent.entity.record.SearchResult;
 import cn.hollis.llm.mentor.agent.entity.record.SimpleReactResult;
+import cn.hollis.llm.mentor.agent.prompts.PlanExecutePrompts;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +24,7 @@ import reactor.core.publisher.Sinks;
 import reactor.core.scheduler.Schedulers;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -33,7 +35,7 @@ public class SimpleReactAgent {
     public static final String REACT_AGENT_SYSTEM_PROMPT = """
             ## 角色
             你是一个联网查询助手，擅长用联网查询工具，查询准确的信息，过滤掉无效的广告。
-            
+                        
             ## 工具调用规则（极其重要）
             1. 如果需要调用工具：必须使用 OpenAI 官方 ToolCall 结构，并且 **只能通过工具调用字段输出**。
             2. 工具调用时：**禁止在 content 中出现任何形式的工具调用文本**（包括 JSON、<tool_call>、函数名、参数、思考、推理或描述）。
@@ -44,15 +46,15 @@ public class SimpleReactAgent {
                -参数必须简洁，不超过500个字符
                -切勿包含以前的工具结果、原始内容、HTML或长文本
                -仅包括工具所需的最小控制参数
-            
+                        
             ## 工具执行结果
             系统会自动将工具执行结果作为 ToolResponseMessage 注入上下文，你只需读取并决定下一步动作。
-            
+                        
             ## 最终答案规则
             1. 如果上下文已经拥有了完成任务的全部信息，则不要再调用任何工具。
             2. 在这种情况下，你必须输出最终自然语言答案，且 **禁止包含任何工具调用格式**。
             3. 最终答案只允许是自然语言，不能包含 JSON、思考过程、reasoning、ToolCall 或伪代码。
-            
+                        
             ## 强制要求（必须遵守）
             1. 工具调用消息必须只通过 ToolCall 字段输出，不允许在 content 字段体现工具调用迹象。
             2. 如果本轮没有工具调用，则视为任务完成，你必须输出最终答案。
@@ -133,18 +135,15 @@ public class SimpleReactAgent {
         List<Message> messages = Collections.synchronizedList(new ArrayList<>());
         boolean useMemory = conversationId != null && chatMemory != null;
 
+        messages.add(new SystemMessage(REACT_AGENT_SYSTEM_PROMPT));
+        messages.add(new SystemMessage(systemPrompt));
+
         // ===== 加载历史记忆 =====
         if (useMemory) {
             List<Message> history = chatMemory.get(conversationId);
             if (history != null && !history.isEmpty()) {
                 messages.addAll(history);
             }
-        }
-
-        // ===== 加载 System Prompt（仅新会话，防止重复）=====
-        if (messages.isEmpty()) {
-            messages.add(new SystemMessage(REACT_AGENT_SYSTEM_PROMPT));
-            messages.add(new SystemMessage(systemPrompt));
         }
 
         messages.add(new UserMessage("<question>" + question + "</question>"));
@@ -155,8 +154,6 @@ public class SimpleReactAgent {
         }
 
         int round = 0;
-
-        int reflectionRound = 0;
 
         while (true) {
             round++;
@@ -169,8 +166,11 @@ public class SimpleReactAgent {
                         禁止再调用任何工具。
                         如果信息不完整，请合理总结和说明。
                         """));
-
-                return chatClient.prompt().messages(messages).call().content();
+                String finalText = chatClient.prompt().messages(messages).call().content();
+                if (useMemory) {
+                    chatMemory.add(conversationId, new AssistantMessage(finalText));
+                }
+                return finalText;
             }
 
             ChatClientResponse chatResponse = chatClient
@@ -185,36 +185,9 @@ public class SimpleReactAgent {
 
             // ===== 没有工具调用，视为最终答案 =====
             if (!chatResponse.chatResponse().hasToolCalls()) {
-                if (maxReflectionRounds > 0 && Boolean.TRUE.equals(chatResponse.context().get("reflection.required"))) {
-                    if (reflectionRound >= maxReflectionRounds) {
-                        log.warn("======= Reflection 最大轮次已达，直接输出结论 =======");
-                        if (useMemory) {
-                            chatMemory.add(conversationId, new UserMessage(question));
-                        }
-                        return aiText;
-                    }
-                    reflectionRound++;
-                    log.info("===== 当前反思机制，第 {} 轮次 =====", reflectionRound);
-
-                    String feedback = (String) chatResponse.context().get("reflection.feedback");
-
-                    // 注入反思反馈，引导模型重新规划
-                    messages.add(new AssistantMessage("""
-                            【Reflection Feedback】
-                            %s
-                            
-                            请你根据以上反思意见重新规划任务，
-                            必要时可以重新调用工具，
-                            然后再给出最终答案。
-                            """.formatted(feedback)));
-
-                    continue;
-                }
-
                 if (useMemory) {
-                    chatMemory.add(conversationId, new UserMessage(question));
+                    chatMemory.add(conversationId, new AssistantMessage(aiText));
                 }
-
                 return aiText;
             }
 
@@ -285,18 +258,15 @@ public class SimpleReactAgent {
         List<Message> messages = Collections.synchronizedList(new ArrayList<>());
         boolean useMemory = conversationId != null && chatMemory != null;
 
+        messages.add(new SystemMessage(REACT_AGENT_SYSTEM_PROMPT));
+        messages.add(new SystemMessage(systemPrompt));
+
         // ===== 加载历史记忆 =====
         if (useMemory) {
             List<Message> history = chatMemory.get(conversationId);
             if (history != null && !history.isEmpty()) {
                 messages.addAll(history);
             }
-        }
-
-        // ===== 加载 System Prompt（仅新会话，防止重复）=====
-        if (messages.isEmpty()) {
-            messages.add(new SystemMessage(REACT_AGENT_SYSTEM_PROMPT));
-            messages.add(new SystemMessage(systemPrompt));
         }
 
         messages.add(new UserMessage("<question>" + question + "</question>"));
@@ -354,7 +324,7 @@ public class SimpleReactAgent {
     private void processChunk(ChatResponse chunk, Sinks.Many<String> sink, RoundState state) {
 
         if (chunk == null || chunk.getResult() == null ||
-            chunk.getResult().getOutput() == null) {
+                chunk.getResult().getOutput() == null) {
             return;
         }
 
@@ -403,7 +373,8 @@ public class SimpleReactAgent {
     /**
      * 轮次结束处理工具调用
      */
-    private void finishRound(List<Message> messages, Sinks.Many<String> sink, RoundState state, AtomicLong roundCounter, AtomicBoolean hasSentFinalResult, StringBuilder finalAnswerBuffer, boolean useMemory, String conversationId) {
+    private void finishRound(List<Message> messages, Sinks.Many<String> sink, RoundState state, AtomicLong roundCounter,
+                             AtomicBoolean hasSentFinalResult, StringBuilder finalAnswerBuffer, boolean useMemory, String conversationId) {
 
         // 如果整轮都没有 tool_call，才是最终答案
         if (state.mode != RoundMode.TOOL_CALL) {
@@ -418,7 +389,7 @@ public class SimpleReactAgent {
         }
 
         if (maxRounds > 0 && roundCounter.get() >= maxRounds) {
-            forceFinalStream(messages, sink, hasSentFinalResult);
+            forceFinalStream(conversationId, useMemory, messages, sink, hasSentFinalResult);
             return;
         }
 
@@ -437,7 +408,7 @@ public class SimpleReactAgent {
     }
 
 
-    private void forceFinalStream(List<Message> messages, Sinks.Many<String> sink, AtomicBoolean hasSentFinalResult) {
+    private void forceFinalStream(String conversationId, boolean useMemory, List<Message> messages, Sinks.Many<String> sink, AtomicBoolean hasSentFinalResult) {
         messages.add(new UserMessage("""
                 你已达到最大推理轮次限制。
                 请基于当前已有的上下文信息，
@@ -446,6 +417,7 @@ public class SimpleReactAgent {
                 如果信息不完整，请合理总结和说明。
                 """));
 
+        StringBuilder stringBuilder = new StringBuilder();
         chatClient.prompt()
                 .messages(messages)
                 .stream()
@@ -462,11 +434,15 @@ public class SimpleReactAgent {
 
                     if (text != null && !hasSentFinalResult.get()) {
                         sink.tryEmitNext(text);
+                        stringBuilder.append(text);
                     }
                 })
                 .doOnComplete(() -> {
                     hasSentFinalResult.set(true);
                     sink.tryEmitComplete();
+                    if (useMemory) {
+                        chatMemory.add(conversationId, new AssistantMessage(stringBuilder.toString()));
+                    }
                 })
                 .doOnError(err -> {
                     hasSentFinalResult.set(true);
@@ -479,10 +455,13 @@ public class SimpleReactAgent {
         AtomicInteger completedCount = new AtomicInteger(0);
         int totalToolCalls = toolCalls.size();
 
+        // 保证顺序一致性
+        Map<String, ToolResponseMessage.ToolResponse> responseMap = new ConcurrentHashMap<>();
+
         for (AssistantMessage.ToolCall tc : toolCalls) {
             Schedulers.boundedElastic().schedule(() -> {
                 if (hasSentFinalResult.get()) {
-                    completeToolCall(completedCount, totalToolCalls, onComplete);
+                    completeToolCall(completedCount, totalToolCalls, responseMap, toolCalls, messages, onComplete);
                     return;
                 }
 
@@ -491,8 +470,10 @@ public class SimpleReactAgent {
 
                 ToolCallback callback = findTool(toolName);
                 if (callback == null) {
-                    addErrorToolResponse(messages, tc, "工具未找到：" + toolName);
-                    completeToolCall(completedCount, totalToolCalls, onComplete);
+                    // 工具未找到时，也放入 responseMap
+                    responseMap.put(tc.id(), new ToolResponseMessage.ToolResponse(
+                            tc.id(), toolName, "{ \"error\": \"工具未找到：" + toolName + "\" }"));
+                    completeToolCall(completedCount, totalToolCalls, responseMap, toolCalls, messages, onComplete);
                     return;
                 }
 
@@ -505,23 +486,45 @@ public class SimpleReactAgent {
                         parseSearchResult(resultStr, agentState);
                     }
 
-                    ToolResponseMessage.ToolResponse tr = new ToolResponseMessage.ToolResponse(
-                            tc.id(), toolName, resultStr);
-                    messages.add(ToolResponseMessage.builder()
-                            .responses(List.of(tr))
-                            .build());
+                    // 将结果放入 responseMap，key 为 toolCall.id()
+                    responseMap.put(tc.id(), new ToolResponseMessage.ToolResponse(
+                            tc.id(), toolName, resultStr));
                 } catch (Exception ex) {
-                    addErrorToolResponse(messages, tc, "工具执行失败：" + ex.getMessage());
+                    // 工具执行失败时，也放入 responseMap
+                    responseMap.put(tc.id(), new ToolResponseMessage.ToolResponse(
+                            tc.id(), toolName, "{ \"error\": \"工具执行失败：" + ex.getMessage() + "\" }"));
                 } finally {
-                    completeToolCall(completedCount, totalToolCalls, onComplete);
+                    completeToolCall(completedCount, totalToolCalls, responseMap, toolCalls, messages, onComplete);
                 }
             });
         }
     }
 
-    private void completeToolCall(AtomicInteger completedCount, int total, Runnable onComplete) {
+    private void completeToolCall(AtomicInteger completedCount, int total,
+                                  Map<String, ToolResponseMessage.ToolResponse> responseMap,
+                                  List<AssistantMessage.ToolCall> originalToolCalls,
+                                  List<Message> messages,
+                                  Runnable onComplete) {
         int current = completedCount.incrementAndGet();
         if (current >= total) {
+            // 按原始 toolCalls 的顺序重组结果
+            List<ToolResponseMessage.ToolResponse> sortedResponses = new ArrayList<>();
+            for (AssistantMessage.ToolCall tc : originalToolCalls) {
+                ToolResponseMessage.ToolResponse response = responseMap.get(tc.id());
+                if (response != null) {
+                    sortedResponses.add(response);
+                } else {
+                    // 如果某个工具调用没有响应，添加一个错误响应
+                    sortedResponses.add(new ToolResponseMessage.ToolResponse(
+                            tc.id(), tc.name(), "{ \"error\": \"工具响应丢失\" }"));
+                }
+            }
+
+            // 一次性添加所有工具响应（按原始顺序）
+            messages.add(ToolResponseMessage.builder()
+                    .responses(sortedResponses)
+                    .build());
+
             onComplete.run();
         }
     }
@@ -618,6 +621,12 @@ public class SimpleReactAgent {
 
         AgentState agentState = withReference ? new AgentState() : null;
 
+        // 先添加时间信息
+        messages.add(new SystemMessage(PlanExecutePrompts.getCurrentTime()));
+        // 再添加系统提示词
+        messages.add(new SystemMessage(REACT_AGENT_SYSTEM_PROMPT));
+        messages.add(new SystemMessage(systemPrompt));
+
         // ===== 加载历史记忆 =====
         if (useMemory) {
             List<Message> history = chatMemory.get(conversationId);
@@ -626,11 +635,6 @@ public class SimpleReactAgent {
             }
         }
 
-        // ===== 加载 System Prompt（仅新会话，防止重复）=====
-        if (messages.isEmpty()) {
-            messages.add(new SystemMessage(REACT_AGENT_SYSTEM_PROMPT));
-            messages.add(new SystemMessage(systemPrompt));
-        }
         messages.add(new UserMessage("<question>" + question + "</question>"));
 
         // 添加记忆
@@ -638,13 +642,8 @@ public class SimpleReactAgent {
             chatMemory.add(conversationId, new UserMessage(question));
         }
 
-        AtomicBoolean hasSentFinalResult = new AtomicBoolean(false);
-
         // 迭代轮次
         int round = 0;
-
-        // 收集最终答案和搜索结果
-        StringBuilder finalAnswerBuffer = new StringBuilder();
 
         while (true) {
             round++;
@@ -674,22 +673,24 @@ public class SimpleReactAgent {
                     .call()
                     .chatClientResponse();
 
-            AssistantMessage.Builder builder = AssistantMessage.builder()
-                    .content(chatResponse.chatResponse().getResult().getOutput().getText());
+            AssistantMessage.Builder builder = AssistantMessage.builder().content(chatResponse.chatResponse().getResult().getOutput().getText());
 
             // ===== 没有工具调用，视为最终答案 =====
             if (!chatResponse.chatResponse().hasToolCalls()) {
                 String finalText = chatResponse.chatResponse().getResult().getOutput().getText();
-                finalAnswerBuffer.append(finalText);
-                hasSentFinalResult.set(true);
-                break;
+                if (useMemory) {
+                    chatMemory.add(conversationId, new AssistantMessage(finalText));
+                }
+                return SimpleReactResult.builder()
+                        .answer(finalText)
+                        .searchResults(agentState.searchResults)
+                        .build();
             }
 
             // ===== 有工具调用：执行工具 =====
             List<AssistantMessage.ToolCall> toolCalls = chatResponse.chatResponse().getResult().getOutput().getToolCalls();
             messages.add(builder.toolCalls(toolCalls).build());
 
-            // 同步执行工具调用（非流式版本）
             for (AssistantMessage.ToolCall toolCall : toolCalls) {
                 String toolName = toolCall.name();
                 String argsJson = toolCall.arguments();
@@ -704,7 +705,7 @@ public class SimpleReactAgent {
                     Object result = callback.call(argsJson);
                     String resultStr = Objects.toString(result, "");
 
-                    // 解析搜索结果（如果是 tavily search）
+                    // 解析搜索结果
                     if (agentState != null) {
                         parseSearchResult(resultStr, agentState);
                     }
@@ -719,11 +720,6 @@ public class SimpleReactAgent {
                 }
             }
         }
-
-        return SimpleReactResult.builder()
-                .answer(finalAnswerBuffer.toString())
-                .searchResults(agentState.searchResults)
-                .build();
     }
 
     public static Builder builder() {

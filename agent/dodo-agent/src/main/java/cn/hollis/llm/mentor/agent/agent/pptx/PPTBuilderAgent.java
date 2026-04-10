@@ -115,9 +115,8 @@ public class PPTBuilderAgent extends BaseAgent {
             PptIntentResult intentResult = intentRecognizer.recognize(conversationId, query);
             log.info("意图识别结果: intent={}, reason={}", intentResult.getIntent(), intentResult.getReason());
 
-            // 2. 保存对话到chatMemory
-            if (chatMemory != null) {
-                chatMemory.add(conversationId, new UserMessage(query));
+            // 2. 保存对话
+            if (sessionService != null) {
                 AiSession savedSession = sessionService.saveQuestion(
                         SaveQuestionRequest.builder()
                                 .sessionId(conversationId)
@@ -158,7 +157,7 @@ public class PPTBuilderAgent extends BaseAgent {
                         // 解析失败，忽略
                     }
                 })
-                .doOnCancel(() -> removeTask(conversationId))
+                .doOnCancel(() -> taskManager.stopTask(conversationId))
                 .doFinally(signalType -> {
                     log.info("PPT处理完成");
                     log.info("最终答案: {}", finalAnswerBuffer);
@@ -176,7 +175,7 @@ public class PPTBuilderAgent extends BaseAgent {
                     }
 
                     // 流结束时移除任务
-                    removeTask(conversationId);
+                    taskManager.stopTask(conversationId);
                 })
                 .doOnError(err -> log.error("PPT处理流输出异常", err));
     }
