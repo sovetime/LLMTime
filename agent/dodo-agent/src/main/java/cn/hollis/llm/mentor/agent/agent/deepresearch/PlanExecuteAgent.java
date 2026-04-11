@@ -58,7 +58,7 @@ public class PlanExecuteAgent extends BaseAgent {
     // 工具重试次数
     private final int maxToolRetries;
 
-    // 用于管理所有需要取消的Disposable
+    // 用于统一管理和取消多个响应式订阅
     private Disposable.Composite compositeDisposable;
 
     // 存储所有搜索结果，用于保存到数据库和发送给前端
@@ -89,10 +89,19 @@ public class PlanExecuteAgent extends BaseAgent {
         this.usedTools = new HashSet<>();
     }
 
+    /**
+     * 获取 Builder 实例
+     *
+     * @return Builder 实例
+     */
     public static Builder builder() {
         return new Builder();
     }
 
+    /**
+     * PlanExecuteAgent 构建器
+     * 使用建造者模式配置 Agent 的各项参数
+     */
     public static class Builder {
         private ChatModel chatModel;
         private List<ToolCallback> tools = new ArrayList<>();
@@ -163,30 +172,73 @@ public class PlanExecuteAgent extends BaseAgent {
         }
     }
 
+    /**
+     * 同步调用（无会话ID）
+     * 阻塞式调用，返回完整响应内容
+     *
+     * @param question 用户问题
+     * @return 完整响应内容
+     */
     public String call(String question) {
         return callInternal(null, question).blockLast();
     }
 
+    /**
+     * 同步调用（带会话ID）
+     * 阻塞式调用，返回完整响应内容
+     *
+     * @param conversationId 会话ID
+     * @param question       用户问题
+     * @return 完整响应内容
+     */
     public String call(String conversationId, String question) {
         return callInternal(conversationId, question).blockLast();
     }
 
+    /**
+     * 流式处理问题（无会话ID）
+     *
+     * @param question 用户问题
+     * @return 流式响应
+     */
     public Flux<String> stream(String question) {
         return callInternal(null, question);
     }
 
+    /**
+     * 流式处理问题（带会话ID）
+     * 入口方法，接收用户问题并启动深度研究流程
+     *
+     * @param conversationId 会话ID
+     * @param question       用户问题
+     * @return 流式响应，包含思考过程和最终答案
+     */
     public Flux<String> stream(String conversationId, String question) {
         return callInternal(conversationId, question);
     }
 
+    /**
+     * 执行方法（BaseAgent 抽象方法的实现）
+     *
+     * @param conversationId 会话ID
+     * @param question       用户问题
+     * @return 流式响应
+     */
     @Override
     public Flux<String> execute(String conversationId, String question) {
         return callInternal(conversationId, question);
     }
 
+    /**
+     * 内部核心处理方法
+     * 协调整个深度研究流程：需求澄清 -> 研究主题生成 -> 计划执行循环 -> 总结输出
+     *
+     * @param conversationId 会话ID
+     * @param question       用户问题
+     * @return 流式响应
+     */
     public Flux<String> callInternal(String conversationId, String question) {
-
-        // 检查是否已有任务在执行
+        // 检查是否已有任务在执行,单个会话只能有一个任务执行
         Flux<String> checkResult = checkRunningTask(conversationId);
         if (checkResult != null) {
             return checkResult;
@@ -202,7 +254,9 @@ public class PlanExecuteAgent extends BaseAgent {
         }
 
         // 初始化会话信息
+        // 初始化计时器
         initTimers();
+        // 清除工具记录
         clearUsedTools();
         currentConversationId = conversationId;
         currentQuestion = question;
@@ -213,7 +267,7 @@ public class PlanExecuteAgent extends BaseAgent {
         StringBuilder thinkingBuffer = new StringBuilder();
         allReferences = new ArrayList<>();
 
-        // 初始化状态并保存问题
+        // 初始化状态并保存用户问题到数据库
         OverAllState state = initStateAndSaveQuestion(conversationId, question);
 
         // 启动流程：需求澄清 -> 研究主题生成 -> 执行循环
@@ -229,7 +283,7 @@ public class PlanExecuteAgent extends BaseAgent {
     }
 
     /**
-     * 初始化状态并保存问题到数据库
+     * 初始化状态并保存用户问题到数据库
      */
     private OverAllState initStateAndSaveQuestion(String conversationId, String question) {
         OverAllState state = new OverAllState(conversationId, question);
@@ -350,35 +404,73 @@ public class PlanExecuteAgent extends BaseAgent {
     }
 
     /**
-     * 需求澄清阶段
+     * 需求澄清阶段 - 通过 LLM 流式分析用户需求并实时返回结果
+     *
+     * <p><b>执行流程:</b></p>
+     * <ol>
+     *   <li>构建消息上下文: 时间信息 + 系统提示词 + 历史对话</li>
+     *   <li>调用 LLM 流式接口,逐块接收响应</li>
+     *   <li>每收到一块数据立即推送到前端(实现打字机效果)</li>
+     *   <li>同时累积完整响应用于后续处理</li>
+     *   <li>完成后触发 handleClarificationComplete 进入下一阶段</li>
+     * </ol>
+     *
+     * <p><b>Reactor 响应式流程:</b></p>
+     * <pre>
+     * chatClient.stream()           // 返回 Flux&lt;String&gt; 流
+     *   .doOnNext(chunk -> ...)     // 每收到一块数据时执行(副作用操作)
+     *   .doOnComplete(() -> ...)    // 流结束时执行
+     *   .doOnError(err -> ...)      // 发生异常时执行
+     *   .subscribeOn(Schedulers...) // 指定订阅在哪个线程池执行
+     *   .subscribe()                // 启动订阅,返回 Disposable 用于取消
+     * </pre>
+     *
+     * @param state 全局状态对象,包含历史消息和上下文信息
+     * @param sink 响应式数据发射器,用于向下游(前端)推送数据块
+     * @param finished 原子布尔标志,标记整个流程是否已完成(线程安全)
+     * @param thinkingBuffer 思考过程缓冲区,累积 LLM 的推理内容
+     * @param onComplete 完成回调,在需求澄清阶段结束后执行
      */
     private void clarifyRequirementPhase(OverAllState state, Sinks.Many<String> sink,
                                          AtomicBoolean finished, StringBuilder thinkingBuffer, Runnable onComplete) {
+        // 发送阶段开始提示到前端
         emit(sink, finished, "\n🔍 正在分析您的需求...\n", "thinking", thinkingBuffer);
 
+        // 构建 LLM 请求消息列表
         List<Message> messages = new ArrayList<>();
-        // 先注入时间信息
+        // 先注入时间信息(让 LLM 知道当前时间上下文)
         messages.add(new SystemMessage(PlanExecutePrompts.getCurrentTime()));
-        // 再注入提示词
+        // 再注入需求澄清的系统提示词(指导 LLM 如何分析需求)
         messages.add(new SystemMessage(PlanExecutePrompts.REQUIREMENT_CLARIFICATION));
+
+        // 添加历史对话消息(用户输入和之前的交互记录)
         messages.addAll(state.getMessages());
 
+        // 用于累积 LLM 完整响应的缓冲区
         StringBuilder responseBuffer = new StringBuilder();
 
+        // 创建响应式订阅并获取 Disposable 句柄
         Disposable disposable = chatClient.prompt()
                 .messages(messages)
-                .stream()
-                .content()
+                .stream()           // 开启流式响应,返回 Flux<String>
+                .content()          // 提取内容流
+                // doOnNext: 每收到一块数据(chunk)时触发,用于处理副作用
                 .doOnNext(chunk -> {
-                    responseBuffer.append(chunk);
+                    responseBuffer.append(chunk);  // 累积完整响应
+                    // 实时推送数据块到前端(通过 Sink)
                     emit(sink, finished, chunk, "thinking", thinkingBuffer);
                 })
+                // doOnComplete: 流正常结束时触发
                 .doOnComplete(() -> handleClarificationComplete(responseBuffer, sink, finished,
                         thinkingBuffer, onComplete))
+                // doOnError: 流发生异常时触发
                 .doOnError(err -> handleError("需求澄清异常", err, sink, finished))
+                // subscribeOn: 指定订阅操作在弹性线程池执行(适合 I/O 密集型任务)
                 .subscribeOn(Schedulers.boundedElastic())
+                // subscribe: 启动订阅,开始消费流数据
                 .subscribe();
 
+        // 将订阅句柄加入复合容器,便于统一取消(如用户中断或组件销毁时)
         compositeDisposable.add(disposable);
     }
 
@@ -406,6 +498,13 @@ public class PlanExecuteAgent extends BaseAgent {
 
     /**
      * 研究主题生成阶段
+     * 根据用户需求生成精炼的研究主题，明确研究方向和范围
+     *
+     * @param state          整体状态
+     * @param sink           响应流
+     * @param finished       完成标志
+     * @param thinkingBuffer 思考过程缓冲区
+     * @param onComplete     完成后的回调
      */
     private void generateResearchTopicPhase(OverAllState state, Sinks.Many<String> sink,
                                             AtomicBoolean finished, StringBuilder thinkingBuffer, Runnable onComplete) {
@@ -459,6 +558,13 @@ public class PlanExecuteAgent extends BaseAgent {
 
     /**
      * 执行循环阶段
+     * 启动计划-执行-批判的迭代循环，直到满足结束条件
+     *
+     * @param state             整体状态
+     * @param sink              响应流
+     * @param finished          完成标志
+     * @param finalAnswerBuffer 最终答案缓冲区
+     * @param thinkingBuffer    思考过程缓冲区
      */
     private void executeLoopPhase(OverAllState state, Sinks.Many<String> sink,
                                   AtomicBoolean finished, StringBuilder finalAnswerBuffer,
@@ -584,6 +690,17 @@ public class PlanExecuteAgent extends BaseAgent {
         }
     }
 
+    /**
+     * 执行循环阶段
+     * 控制多轮迭代的研究流程，每轮包括：生成计划、执行任务、批判评估
+     *
+     * @param state            整体状态
+     * @param sink             响应流
+     * @param finished         完成标志
+     * @param finalAnswerBuffer 最终答案缓冲区
+     * @param thinkingBuffer   思考过程缓冲区
+     * @return 异步执行结果
+     */
     private Mono<Void> executeLoop(OverAllState state,
                                    Sinks.Many<String> sink,
                                    AtomicBoolean finished,
@@ -660,6 +777,16 @@ public class PlanExecuteAgent extends BaseAgent {
         });
     }
 
+    /**
+     * 生成执行计划
+     * 根据当前状态和研究主题，生成本轮需要执行的任务列表
+     *
+     * @param state          整体状态
+     * @param sink           响应流
+     * @param hasSentFinal   是否已发送最终结果
+     * @param thinkingBuffer 思考过程缓冲区
+     * @return 任务列表
+     */
     private List<PlanTask> generatePlan(OverAllState state, Sinks.Many<String> sink, AtomicBoolean hasSentFinal, StringBuilder thinkingBuffer) {
         String toolDesc = renderToolDescriptions();
         BeanOutputConverter<List<PlanTask>> converter = new BeanOutputConverter<>(new ParameterizedTypeReference<>() {
@@ -722,6 +849,17 @@ public class PlanExecuteAgent extends BaseAgent {
         return planTasks;
     }
 
+    /**
+     * 执行计划任务
+     * 按照计划任务的顺序和依赖关系执行所有任务，支持同 order 任务并行执行
+     *
+     * @param plan           任务计划列表
+     * @param state          整体状态
+     * @param sink           响应流
+     * @param hasSentFinal   是否已发送最终结果
+     * @param thinkingBuffer 思考过程缓冲区
+     * @return 任务执行结果映射（taskId -> TaskResult）
+     */
     private Map<String, TaskResult> executePlan(List<PlanTask> plan, OverAllState state, Sinks.Many<String> sink,
                                                 AtomicBoolean hasSentFinal, StringBuilder thinkingBuffer) {
 
@@ -854,8 +992,8 @@ public class PlanExecuteAgent extends BaseAgent {
 
 
     /**
-     * 执行单个任务（带上下文）
-     * 上下文格式：【Available Results】\n[依赖结果]\n\n【Current Task】\n[任务指令]
+     * 执行单个任务（带重试机制）
+     * 使用 SimpleReactAgent 执行具体任务，自动处理工具调用和搜索结果收集
      *
      * @param task              要执行的任务
      * @param dependencyContext 依赖上下文（只包含依赖结果）
@@ -933,13 +1071,12 @@ public class PlanExecuteAgent extends BaseAgent {
 
     /**
      * 构建任务执行的依赖上下文
-     * 规则：同 order 的任务不传依赖（并行），不同 order 的任务只传递上一个 order 的结果
-     * 注意：此方法只返回【Available Results】部分，【Current Task】由 executeWithRetry 拼接
+     * 根据任务 order 关系确定依赖：同 order 的任务并行执行不传依赖，不同 order 的任务传递上一个 order 的结果
      *
      * @param results      所有已完成任务的结果
      * @param plan         当前轮次的执行计划（用于获取任务 order）
      * @param currentOrder 当前任务的 order
-     * @return 依赖上下文字符串
+     * @return 依赖上下文字符串（只返回【Available Results】部分）
      */
     private String buildDependencyContext(Map<String, String> results, List<PlanTask> plan, int currentOrder) {
         StringBuilder context = new StringBuilder();
@@ -980,8 +1117,8 @@ public class PlanExecuteAgent extends BaseAgent {
 
 
     /**
-     * 批判当前轮次的研究结果
-     * 上下文：用户问题 + 研究主题 + 当前轮次的执行计划 + 当前轮次的工具结果
+     * 批判评估当前轮次的研究结果
+     * 评估本轮研究是否达到预期目标，决定是否需要继续迭代优化
      *
      * @param state          整体状态
      * @param currentPlan    当前轮次的执行计划
@@ -989,7 +1126,7 @@ public class PlanExecuteAgent extends BaseAgent {
      * @param sink           响应流
      * @param hasSentFinal   是否已发送最终结果
      * @param thinkingBuffer 思考过程缓冲
-     * @return 批判结果
+     * @return 批判结果，包含是否通过和反馈建议
      */
     private CritiqueResult critique(OverAllState state, List<PlanTask> currentPlan,
                                     Map<String, TaskResult> currentResults,
@@ -1058,6 +1195,15 @@ public class PlanExecuteAgent extends BaseAgent {
         return result;
     }
 
+    /**
+     * 按需压缩上下文
+     * 当上下文超过设定阈值时，对历史内容进行压缩以控制 token 使用量
+     *
+     * @param state          整体状态
+     * @param sink           响应流
+     * @param hasSentFinal   是否已发送最终结果
+     * @param thinkingBuffer 思考过程缓冲区
+     */
     private void compressIfNeeded(OverAllState state, Sinks.Many<String> sink, AtomicBoolean hasSentFinal, StringBuilder thinkingBuffer) {
         if (state.currentChars() < contextCharLimit) {
             return;
@@ -1098,6 +1244,16 @@ public class PlanExecuteAgent extends BaseAgent {
     }
 
 
+    /**
+     * 生成最终研究报告（流式输出）
+     * 整合所有研究轮次的结果，生成结构化的最终答案并流式输出
+     *
+     * @param state             整体状态
+     * @param sink              响应流
+     * @param finished          完成标志
+     * @param finalAnswerBuffer 最终答案缓冲区
+     * @param thinkingBuffer    思考过程缓冲区
+     */
     private void summarizeStream(OverAllState state,
                                  Sinks.Many<String> sink,
                                  AtomicBoolean finished,

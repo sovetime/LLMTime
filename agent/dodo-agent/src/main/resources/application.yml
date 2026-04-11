@@ -24,9 +24,9 @@ spring:
           dimmension: 1024
 
   datasource:
-    url: jdbc:mysql://127.0.0.1:3306/dodo?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%2B8 # 记得改成你自己的
-    username: root # 记得改成你自己的
-    password: root # 记得改成你自己的
+    url: jdbc:mysql://127.0.0.1:3307/spring_ai?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=GMT%2B8 # 记得改成你自己的
+    username: root
+    password: 123456
     driver-class-name: com.mysql.cj.jdbc.Driver
     # 连接池配置
     hikari:
@@ -46,19 +46,19 @@ spring:
       max-request-size: 50MB
 
 minio:
-  url: http://192.168.11.163:19000/   # 记得改成你自己的
-  accessKey: minioadmin # 记得改成你自己的
-  secretKey: minioadmin # 记得改成你自己的
-  bucketName: rag-test2
-  endpoint: http://192.168.11.163:19000/
+  url: http://localhost:9000/
+  accessKey: minioadmin
+  secretKey: minioadmin
+  bucketName: dodo-agent
+  endpoint: http://localhost:9000/
 
 embeddings:
   store:
-    host: 192.168.113.52   # 记得改成你自己的
-    port: 5433   # 记得改成你自己的
-    database: vector_store   # 记得改成你自己的
-    user: postgres   # 记得改成你自己的
-    password: postgres   # 记得改成你自己的
+    host: localhost
+    port: 5432
+    database: rag_test
+    user: pgvector
+    password: pgvector
 
 # Tavily 搜索引擎配置
 tavily:

@@ -146,6 +146,14 @@ public class AgentController implements InitializingBean {
         }
     }
 
+    /**
+     * 深度研究流式接口
+     * 接收用户查询并使用 Plan-Execute 模式进行深度研究，返回流式响应
+     *
+     * @param query          用户查询内容
+     * @param conversationId 会话ID，用于维护对话上下文
+     * @return 流式响应，包含研究过程中的思考过程和最终答案
+     */
     @GetMapping(value = "/deep/stream", produces = "text/event-stream;charset=UTF-8")
     @Operation(summary = "深度研究", description = "接收用户查询并返回流式响应，使用计划-执行模式进行深度研究")
     public Flux<String> deepStream(@RequestParam(required = true) String query,
@@ -158,10 +166,12 @@ public class AgentController implements InitializingBean {
         }
 
         try {
+            // 初始化 PlanExecute Agent
             PlanExecuteAgent planExecuteAgent = initPlanExecuteAgent();
             // 使用持久化记忆加载历史记录
             ChatMemory persistentMemory = planExecuteAgent.createPersistentChatMemory(conversationId, 30);
             planExecuteAgent.setChatMemory(persistentMemory);
+            // 调用 stream 方法开始流式处理
             return planExecuteAgent.stream(conversationId, query);
         } catch (Exception e) {
             log.error("处理深度研究请求时发生错误: ", e);
@@ -271,6 +281,9 @@ public class AgentController implements InitializingBean {
 
     /**
      * 初始化 PlanExecute Agent
+     * 构建深度研究智能体，配置聊天模型、搜索工具和任务管理器
+     *
+     * @return 配置完成的 PlanExecuteAgent 实例
      */
     private PlanExecuteAgent initPlanExecuteAgent() {
         log.info("初始化 PlanExecute Agent...");

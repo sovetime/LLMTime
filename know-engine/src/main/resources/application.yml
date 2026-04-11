@@ -95,11 +95,11 @@ elasticsearch:
   dimensions: 1536
 
 minio:
-  url: http://localhost:9000 # 记得改成你自己的
-  accessKey: minioadmin # 记得改成你自己的
-  secretKey: minioadmin # 记得改成你自己的
-  bucketName: know-engine # 记得改成你自己的
-  endpoint: http://localhost:9000 # 记得改成你自己的
+  url: http://localhost:9000
+  accessKey: minioadmin
+  secretKey: minioadmin
+  bucketName: know-engine
+  endpoint: http://localhost:9000
 
 # 文件解析服务配置
 file:
@@ -111,7 +111,7 @@ file:
 xxl:
   job:
     admin:
-      addresses: http://127.0.0.1:8080/xxl-job-admin # xxl-job-admin 地址，记得改成你自己的
+      addresses: http://localhost:8999/xxl-job-admin
     accessToken: default_token
     executor:
-      appname: know-engine-executor # 执行器名称
+      appname: know-engine-executor
