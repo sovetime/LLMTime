@@ -29,7 +29,7 @@ public class SearchStrategy implements PptStateStrategy {
         // 构建搜索提示
         String searchPrompt = PptBuilderPrompts.getSearchInfoPrompt(requirement);
 
-        // 获取 SimpleReactAgent 并注入 tavily 搜索工具
+        // 获取 SimpleReactAgent 并注入网页搜索工具
         SimpleReactAgent agent = SimpleReactAgent.builder()
                 .chatModel(context.getChatModel())
                 .tools(context.getToolCallbacks())

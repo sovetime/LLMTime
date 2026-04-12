@@ -7,27 +7,21 @@ import cn.hollis.llm.mentor.agent.agent.websearch.WebSearchReactAgent;
 import cn.hollis.llm.mentor.agent.service.AgentTaskManager;
 import cn.hollis.llm.mentor.agent.service.AiSessionService;
 import cn.hollis.llm.mentor.agent.tool.FileContentService;
-import io.modelcontextprotocol.client.McpClient;
-import io.modelcontextprotocol.client.McpSyncClient;
-import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
+import cn.hollis.llm.mentor.agent.tool.MetasoSearchService;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.mcp.SyncMcpToolCallbackProvider;
 import org.springframework.ai.support.ToolCallbacks;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Flux;
 
-import java.net.http.HttpRequest;
-import java.time.Duration;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -54,17 +48,8 @@ public class AgentController implements InitializingBean {
     @Autowired
     private FileContentService fileContentService;
 
-    /**
-     * Tavily 搜索引擎 API Key
-     */
-    @Value("${tavily.api-key}")
-    private String tavilyApiKey;
-
-    /**
-     * Tavily MCP URL
-     */
-    @Value("${tavily.mcp-url}")
-    private String tavilyMcpUrl;
+    @Autowired
+    private MetasoSearchService metasoSearchService;
 
     /**
      * 网页搜索工具回调
@@ -213,23 +198,7 @@ public class AgentController implements InitializingBean {
     private void initWebSearchToolCallbacks() throws Exception {
         log.info("初始化网页搜索工具回调...");
 
-        // tavily 搜索引擎
-        String authorizationHeader = "Bearer " + tavilyApiKey;
-
-        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
-                .header("Authorization", authorizationHeader);
-
-        HttpClientStreamableHttpTransport tavTransport = HttpClientStreamableHttpTransport.builder(tavilyMcpUrl)
-                .requestBuilder(requestBuilder).build();
-        McpSyncClient tavilyMcp = McpClient.sync(tavTransport)
-                .requestTimeout(Duration.ofSeconds(300))
-                .build();
-        tavilyMcp.initialize();
-
-        List<McpSyncClient> mcpClients = List.of(tavilyMcp);
-        SyncMcpToolCallbackProvider provider = SyncMcpToolCallbackProvider.builder().mcpClients(mcpClients).build();
-
-        webSearchToolCallbacks = provider.getToolCallbacks();
+        webSearchToolCallbacks = ToolCallbacks.from(metasoSearchService);
         log.info("网页搜索工具回调初始化完成，工具数量: {}", webSearchToolCallbacks.length);
     }
 

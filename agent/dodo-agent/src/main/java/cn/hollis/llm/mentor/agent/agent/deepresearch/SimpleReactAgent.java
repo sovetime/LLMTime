@@ -5,8 +5,7 @@ import cn.hollis.llm.mentor.agent.entity.record.RoundMode;
 import cn.hollis.llm.mentor.agent.entity.record.SearchResult;
 import cn.hollis.llm.mentor.agent.entity.record.SimpleReactResult;
 import cn.hollis.llm.mentor.agent.prompts.PlanExecutePrompts;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import cn.hollis.llm.mentor.agent.utils.SearchResultParser;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.ChatClientResponse;
@@ -78,8 +77,6 @@ public class SimpleReactAgent {
     private List<Advisor> advisors;
     //最大反思轮数
     private int maxReflectionRounds;
-
-    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     public SimpleReactAgent(String name, ChatModel chatModel, List<ToolCallback> tools, String systemPrompt, int maxRounds, ChatMemory chatMemory, List<Advisor> advisors, int maxReflectionRounds) {
         this.name = name;
@@ -481,7 +478,7 @@ public class SimpleReactAgent {
                     Object result = callback.call(argsJson);
                     String resultStr = Objects.toString(result, "");
 
-                    // 解析搜索结果（如果是 tavily search）
+                    // 解析搜索结果
                     if (agentState != null) {
                         parseSearchResult(resultStr, agentState);
                     }
@@ -553,53 +550,14 @@ public class SimpleReactAgent {
      * 从工具返回的 JSON 中提取搜索结果并添加到 AgentState
      */
     private void parseSearchResult(String resultJson, AgentState state) {
-        try {
-            JsonNode root = MAPPER.readTree(resultJson);
-
-            // tavily 搜索结果格式: [{ "text": { "results": [...] } }]
-            if (!root.isArray() || root.isEmpty()) {
-                return;
+        List<SearchResult> parsedResults = SearchResultParser.parse(resultJson);
+        for (SearchResult parsedResult : parsedResults) {
+            boolean exists = state.searchResults.stream()
+                    .anyMatch(item -> Objects.equals(item.url(), parsedResult.url()));
+            if (!exists) {
+                state.searchResults.add(parsedResult);
             }
-
-            JsonNode first = root.get(0);
-            JsonNode textNode = first.get("text");
-
-            if (textNode == null || textNode.isNull()) {
-                return;
-            }
-
-            JsonNode textJson;
-            if (textNode.isTextual()) {
-                textJson = MAPPER.readTree(textNode.asText());
-            } else {
-                textJson = textNode;
-            }
-
-            JsonNode results = textJson.get("results");
-            if (results == null || !results.isArray()) {
-                return;
-            }
-
-            for (JsonNode item : results) {
-                String url = getSafe(item, "url");
-                String title = getSafe(item, "title");
-                String content = getSafe(item, "content");
-
-                if (url != null && !url.isBlank()) {
-                    state.searchResults.add(new SearchResult(url, title, content));
-                }
-            }
-        } catch (Exception e) {
-            log.warn("解析搜索结果失败: {}", e.getMessage());
         }
-    }
-
-    /**
-     * 获取节点安全值
-     */
-    private String getSafe(JsonNode node, String field) {
-        JsonNode v = node.get(field);
-        return v == null || v.isNull() ? null : v.asText();
     }
 
     /**

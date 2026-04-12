@@ -13,8 +13,7 @@ import cn.hollis.llm.mentor.agent.service.AgentTaskManager;
 import cn.hollis.llm.mentor.agent.service.AiSessionService;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import cn.hollis.llm.mentor.agent.utils.SearchResultParser;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.ai.chat.client.ChatClient;
@@ -51,8 +50,6 @@ public class WebSearchReactAgent extends BaseAgent {
     private int maxRounds;
     private final List<Advisor> advisors;
     private final int maxReflectionRounds;
-
-    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     public WebSearchReactAgent(String name, ChatModel chatModel, List<ToolCallback> tools, String systemPrompt, int maxRounds,
                                ChatMemory chatMemory, List<Advisor> advisors, int maxReflectionRounds,
@@ -493,8 +490,8 @@ public class WebSearchReactAgent extends BaseAgent {
                     // 记录使用的工具
                     recordUsedTool(toolName);
 
-                    // 解析 tavily 搜索结果
-                    if (toolName.contains("tavily")) {
+                    // 解析网页搜索结果
+                    if (toolName.contains("search")) {
                         parseSearchResult(resultStr, agentState);
                     }
 
@@ -542,50 +539,14 @@ public class WebSearchReactAgent extends BaseAgent {
     }
 
     private void parseSearchResult(String resultJson, AgentState state) {
-        try {
-            JsonNode root = MAPPER.readTree(resultJson);
-
-            if (!root.isArray() || root.isEmpty()) {
-                return;
+        List<SearchResult> parsedResults = SearchResultParser.parse(resultJson);
+        for (SearchResult parsedResult : parsedResults) {
+            boolean exists = state.searchResults.stream()
+                    .anyMatch(item -> Objects.equals(item.url(), parsedResult.url()));
+            if (!exists) {
+                state.searchResults.add(parsedResult);
             }
-
-            JsonNode first = root.get(0);
-            JsonNode textNode = first.get("text");
-
-            if (textNode == null || textNode.isNull()) {
-                return;
-            }
-
-            JsonNode textJson;
-            if (textNode.isTextual()) {
-                textJson = MAPPER.readTree(textNode.asText());
-            } else {
-                textJson = textNode;
-            }
-
-            JsonNode results = textJson.get("results");
-            if (results == null || !results.isArray()) {
-                return;
-            }
-
-            for (JsonNode item : results) {
-                String url = getSafe(item, "url");
-                String title = getSafe(item, "title");
-                String content = getSafe(item, "content");
-
-                if (url != null && !url.isBlank()) {
-                    state.searchResults.add(new SearchResult(url, title, content));
-                }
-            }
-
-        } catch (Exception e) {
-            log.warn("解析 tavily 搜索结果失败: {}", e.getMessage());
         }
-    }
-
-    private String getSafe(JsonNode node, String field) {
-        JsonNode v = node.get(field);
-        return v == null || v.isNull() ? null : v.asText();
     }
 
     private void addErrorToolResponse(List<Message> messages, AssistantMessage.ToolCall toolCall, String errMsg) {

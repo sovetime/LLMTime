@@ -110,7 +110,7 @@ public class FileManageService {
                     .status(FileInfo.FileStatus.PROCESSING)
                     .build();
 
-            // 先保存到数据库（初始状态为PROCESSING）
+            // 先保存到数据库（初始状态 processing）
             fileInfoService.saveFileInfo(fileInfo);
 
             // 上传到 MinIO
@@ -118,7 +118,7 @@ public class FileManageService {
             String minioPath = minioService.uploadFile(file, objectName);
             log.info("MinIO 上传完成: fileId={}", fileId);
 
-            // 更新MinIO路径
+            // 更新MinIO路径，文件状态 sucess
             fileInfo.setMinioPath(minioPath);
             fileInfo.setStatus(FileInfo.FileStatus.SUCCESS);
             fileInfoService.updateFileInfo(fileInfo);
@@ -126,6 +126,7 @@ public class FileManageService {
             // 根据文件类型进行不同的处理
             if (isTextFile(fileType)) {
                 try {
+                    // 析上传的文件并返回文本内容
                     var parseResult = fileParserService.parseFile(file);
                     String fullText = parseResult.getFullText();
                     String extractedText = parseResult.getTruncatedText();

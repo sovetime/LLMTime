@@ -60,10 +60,15 @@ embeddings:
     user: pgvector
     password: pgvector
 
-# Tavily 搜索引擎配置
-tavily:
-  api-key: tvly-dev-DXXXXXXXXX  # 记得改成你自己的
-  mcp-url: https://mcp.tavily.com/mcp/
+# 秘塔搜索配置
+metaso:
+  api-key: mk-84529ADC83175BB469C4461BF2DDA39A
+  search-url: https://metaso.cn/api/v1/search
+  scope: webpage
+  size: 10
+  include-summary: false
+  include-raw-content: false
+  concise-snippet: false
 
 grsai:
   nanobanana:

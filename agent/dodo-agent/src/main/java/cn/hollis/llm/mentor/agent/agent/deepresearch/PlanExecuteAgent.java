@@ -729,6 +729,7 @@ public class PlanExecuteAgent extends BaseAgent {
                     // 执行计划前的分隔
                     emit(sink, finished, "\n--- 开始执行任务 ---\n\n", "thinking", thinkingBuffer);
 
+                    //执行工具调用任务
                     Map<String, TaskResult> results = executePlan(plan, state, sink, finished, thinkingBuffer);
                     if (finished.get() || compositeDisposable.isDisposed()) {
                         return;
