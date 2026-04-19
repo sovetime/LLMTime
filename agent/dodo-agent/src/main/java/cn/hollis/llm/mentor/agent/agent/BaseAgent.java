@@ -251,17 +251,6 @@ public abstract class BaseAgent {
     }
 
     /**
-     * 移除任务
-     *
-     * @param conversationId 会话ID
-     */
-    protected void removeTask(String conversationId) {
-        if (conversationId != null && taskManager != null) {
-            taskManager.removeTask(conversationId);
-        }
-    }
-
-    /**
      * 初始化计时器
      */
     protected void initTimers() {

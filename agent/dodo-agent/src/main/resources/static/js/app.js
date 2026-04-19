@@ -518,10 +518,10 @@ createApp({
         const stopMessage = async () => {
             if (!isSending.value) return;
 
-            if (abortController) {
-                abortController.abort();
-                abortController = null;
-            }
+            // if (abortController) {
+            //     abortController.abort();
+            //     abortController = null;
+            // }
 
             await APP_API.stopStream(backendUrl.value, currentChatId.value);
 

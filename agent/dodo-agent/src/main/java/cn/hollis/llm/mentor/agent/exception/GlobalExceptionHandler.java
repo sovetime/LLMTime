@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.converter.HttpMessageNotWritableException;
 import org.springframework.validation.BindException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -18,6 +19,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 
 import javax.validation.ConstraintViolation;
 import javax.validation.ConstraintViolationException;
+import java.io.IOException;
 import java.net.ConnectException;
 import java.nio.channels.ClosedChannelException;
 import java.util.Objects;
@@ -35,7 +37,6 @@ public class GlobalExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
     private static final String INTERNAL_SERVER_ERROR_MSG = "服务器内部错误，请联系管理员";
 
-    // 新增：网络连接异常提示
     private static final String CONNECT_ERROR_MSG = "服务调用失败，目标服务连接异常，请检查网络或目标服务状态";
 
     @ExceptionHandler(ConnectException.class)
@@ -57,14 +58,26 @@ public class GlobalExceptionHandler {
         return BaseResult.fail(503, msg);
     }
 
-    /**
-     * 处理 SSE 流式输出时客户端断开连接的异常
-     * 这是一个正常的场景，静默处理不返回错误响应
-     */
     @ExceptionHandler(AsyncRequestNotUsableException.class)
     public void handleAsyncRequestNotUsableException(AsyncRequestNotUsableException e, HttpServletRequest request) {
         log.debug("SSE连接已断开: requestUri={}, cause={}",
                 request.getRequestURI(), e.getCause() != null ? e.getCause().getMessage() : "未知原因");
+    }
+
+    @ExceptionHandler(IOException.class)
+    public void handleIOException(IOException e, HttpServletRequest request) {
+        String msg = e.getMessage();
+        if (msg != null && (msg.contains("中止") || msg.contains("断开") || msg.contains("Broken pipe")
+                || msg.contains("Connection reset") || msg.contains("已建立的连接"))) {
+            log.debug("SSE客户端连接断开: requestUri={}, reason={}", request.getRequestURI(), msg);
+        } else {
+            log.error("请求地址[{}]发生IO异常", request.getRequestURI(), e);
+        }
+    }
+
+    @ExceptionHandler(HttpMessageNotWritableException.class)
+    public void handleHttpMessageNotWritableException(HttpMessageNotWritableException e, HttpServletRequest request) {
+        log.debug("SSE响应已提交，无法写入错误响应: requestUri={}", request.getRequestURI());
     }
 
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
