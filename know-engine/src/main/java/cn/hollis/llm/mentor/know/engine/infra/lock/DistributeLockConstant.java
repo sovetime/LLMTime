@@ -3,6 +3,7 @@ package cn.hollis.llm.mentor.know.engine.infra.lock;
 /**
  * 分布式锁常量
  *
+ * @author hollis
  */
 public class DistributeLockConstant {
 

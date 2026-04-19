@@ -5,7 +5,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = ElasticSearchProperties.PREFIX)
 public class ElasticSearchProperties {
-
     public static final String PREFIX = "elasticsearch";
 
     private String host;

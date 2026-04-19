@@ -67,3 +67,40 @@ CREATE TABLE `table_meta` (
     -- 创建时间索引
     INDEX `idx_created_at` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT = '表元数据表';
+
+-- AI对话会话表
+CREATE TABLE `chat_conversation` (
+    `id`              BIGINT      NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `conversation_id` VARCHAR(64) NOT NULL COMMENT '会话唯一标识',
+    `user_id`         VARCHAR(64) NOT NULL COMMENT '用户ID',
+    `title`           VARCHAR(512) NULL    COMMENT '会话标题',
+    `created_at`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
+    `lock_version` INT          NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
+    `deleted`      TINYINT      NOT NULL DEFAULT 0 COMMENT '是否删除：0-未删除，1-已删除',
+    `status`          VARCHAR(32) NOT NULL DEFAULT 'active' COMMENT '状态',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_conversation_id` (`conversation_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT = 'AI对话会话表';
+
+-- AI对话消息表
+CREATE TABLE `chat_message` (
+    `id`               BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `message_id`       VARCHAR(64)  NOT NULL COMMENT '消息唯一标识',
+    `conversation_id`  VARCHAR(64)  NOT NULL COMMENT '所属会话ID',
+    `type`             VARCHAR(32)  NOT NULL COMMENT '角色：USER/ASSISTANT',
+    `content`          LONGTEXT     NOT NULL COMMENT '消息内容',
+    `transform_content` LONGTEXT    NULL     COMMENT '改写后的内容',
+    `token_count`      INT          NULL     COMMENT 'Token数量',
+    `model_name`       VARCHAR(128) NULL     COMMENT '使用的模型名称',
+    `rag_references`   JSON         NULL     COMMENT 'RAG引用内容JSON数组，包含document_id、document_title、chunk_id、chunk_content、similarity_score、retrieval_source等字段',
+    `created_at`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
+    `lock_version` INT          NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
+    `deleted`      TINYINT      NOT NULL DEFAULT 0 COMMENT '是否删除：0-未删除，1-已删除',
+    `metadata`         JSON         NULL     COMMENT '扩展元数据JSON格式',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_message_id` (`message_id`),
+    INDEX `idx_conversation_id` (`conversation_id`),
+    INDEX `idx_create_time` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT = 'AI对话消息表';

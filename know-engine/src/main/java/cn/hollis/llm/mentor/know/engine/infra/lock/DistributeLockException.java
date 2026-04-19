@@ -3,6 +3,7 @@ package cn.hollis.llm.mentor.know.engine.infra.lock;
 /**
  * 分布式锁异常
  *
+ * @author hollis
  */
 public class DistributeLockException extends RuntimeException {
 

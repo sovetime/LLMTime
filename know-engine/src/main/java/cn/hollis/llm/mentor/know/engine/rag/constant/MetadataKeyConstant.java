@@ -2,6 +2,7 @@ package cn.hollis.llm.mentor.know.engine.rag.constant;
 
 /**
  * 元数据的键常量
+ * @author Hollis
  */
 public class MetadataKeyConstant {
     /**
