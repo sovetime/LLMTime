@@ -1,3 +1,9 @@
+
+CREATE DATABASE IF NOT EXISTS `know_engine` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+USE `know_engine`;
+
+
 -- 知识文档表
 CREATE TABLE `knowledge_document` (
     `doc_id`        BIGINT        NOT NULL AUTO_INCREMENT COMMENT '文档ID',

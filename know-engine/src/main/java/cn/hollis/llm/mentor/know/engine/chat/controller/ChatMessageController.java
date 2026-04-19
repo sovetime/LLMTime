@@ -11,6 +11,7 @@ import java.util.Map;
 
 /**
  * AI对话消息 Controller
+ * 类似ChatGPT/Claude 一个会话下的聊天记录
  */
 @RestController
 @RequestMapping("/chat/message")

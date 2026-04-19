@@ -25,13 +25,11 @@ import static dev.langchain4j.internal.Utils.getOrDefault;
 
 /**
  * 查询路由器
- * <p>
  * 基于 LLM 智能判断用户查询意图，将查询路由到最合适的内容检索器。
  * 支持三种数据源路由策略：
- * <ul>
- *   <li><b>关系型数据库 (relational_db)</b>：适用于结构化数据查询，如车辆信息、保险信息、订单信息等</li>
- *   <li><b>图数据库 (graph_db)</b>：适用于实体关系查询，如车型关系、影响链、层级结构等</li>
- *   <li><b>知识库 (knowledge_base)</b>：适用于语义相似性查询，如售前咨询、售后支持、技术问题等</li>
+ * 1.关系型数据库 (relational_db)</b>：适用于结构化数据查询，如车辆信息、保险信息、订单信息等</li>
+ * 2.图数据库 (graph_db)</b>：适用于实体关系查询，如车型关系、影响链、层级结构等</li>
+ * 3.知识库 (knowledge_base)</b>：适用于语义相似性查询，如售前咨询、售后支持、技术问题等</li>
  * </ul>
  * <p>
  * <b>路由决策流程：</b>
@@ -49,6 +47,7 @@ import static dev.langchain4j.internal.Utils.getOrDefault;
 @Slf4j
 public class KnowEngineQueryRouter implements QueryRouter {
 
+    //
     private final Collection<ContentRetriever> contentRetrievers;
 
     protected final PromptTemplate promptTemplate;
@@ -109,10 +108,11 @@ public class KnowEngineQueryRouter implements QueryRouter {
         String response = chatModel.chat(createPrompt(query).text());
 
         try {
+            //对大模型返回参数进行处理，修复可能的json问题
             QueryRouteResult queryRouteResult = JSON.parseObject(JsonUtil.fixJson(response), QueryRouteResult.class);
+            //根据推荐策略查询关系型数据库、图数据库、向量库
             String strategy = queryRouteResult.strategy();
             log.info("Route Success , query: {} , strategy: {}", query, strategy);
-
             switch (strategy) {
                 case "relational_db":
                     return contentRetrievers.stream().filter(retriever -> retriever instanceof SqlDatabaseContentRetriever).collect(Collectors.toList());
@@ -141,6 +141,5 @@ public class KnowEngineQueryRouter implements QueryRouter {
         variables.put("query", query.text());
         return promptTemplate.apply(variables);
     }
-
 
 }

@@ -20,27 +20,19 @@ import static dev.langchain4j.internal.ValidationUtils.ensureNotNull;
 
 /**
  * KnowEngine 查询改写器
- * <p>
- * 基于 LLM 对用户查询进行智能改写优化，提升 RAG 检索效果。
+ * 基于 LLM 对用户查询进行智能改写优化，提升 RAG 检索效果
  * 支持四种改写策略：
- * <ul>
- *   <li><b>简洁改写</b>：删除无意义的语气词、修饰词，将疑问句转为陈述句</li>
- *   <li><b>抽象概念改写</b>：将具体问题转化为更基础、更抽象的查询表述</li>
- *   <li><b>错别字改写</b>：纠正错别字和拼音错误</li>
- * </ul>
- * <p>
- * <b>处理流程：</b>
- * <ol>
- *   <li>发送进度事件通知前端"正在优化您的问题"</li>
- *   <li>使用 LLM 根据 Prompt 模板改写用户查询</li>
- *   <li>构造增强查询（添加用户ID、当前时间等上下文）</li>
- *   <li>异步回写改写结果到数据库</li>
- *   <li>返回改写后的查询和原始查询</li>
- * </ol>
- * <p>
- * <b>注意：</b>返回的集合包含两个查询 - 改写后的查询（用于语义检索）和原始查询（用于精确匹配）
+ * 1. 简洁改写，删除无意义的语气词、修饰词，将疑问句转为陈述句
+ * 2. 抽象概念改写，将具体问题转化为更基础、更抽象的查询表述
+ * 3. 错别字改写，纠正错别字和拼音错误
  *
- * @see QueryTransformer
+ * 处理流程
+ * 1. 发送进度事件通知前端"正在优化您的问题"
+ * 2. 使用 LLM 根据 Prompt 模板改写用户查询
+ * 3. 构造增强查询（添加用户ID、当前时间等上下文）
+ * 4. 异步回写改写结果到数据库
+ * 5. 返回改写后的查询和原始查询
+ * 注意：返回的集合包含两个查询 - 改写后的查询（用于语义检索）和原始查询（用于精确匹配）
  */
 @Slf4j
 public class KnowEngineQueryTransformer implements QueryTransformer {
@@ -49,24 +41,16 @@ public class KnowEngineQueryTransformer implements QueryTransformer {
 
     protected final PromptTemplate promptTemplate;
 
-    /**
-     * assistant 消息的 messageId，用于回写改写结果
-     */
+    // assistant 消息的 messageId，用于回写改写结果
     private final String assistantMsgId;
 
-    /**
-     * 进度回调，用于流式返回前端进度信息
-     */
+    //进度回调，用于流式返回前端进度信息
     private final Consumer<String> progressCallback;
 
-    /**
-     * Spring 容器，由使用方在构造时传入
-     */
+    //Spring 容器，由使用方在构造时传入
     private static volatile ApplicationContext applicationContext;
 
-    /**
-     * 注册全局 ApplicationContext（由 SpringContextHolder 调用一次即可）
-     */
+    //注册全局 ApplicationContext（由 SpringContextHolder 调用一次即可）
     public static void setApplicationContext(ApplicationContext ctx) {
         applicationContext = ctx;
     }

@@ -7,8 +7,6 @@ import dev.langchain4j.service.spring.AiService;
 
 /**
  * 意图识别服务
- *
- * @author Hollis
  */
 public interface IntentRecognitionService {
 

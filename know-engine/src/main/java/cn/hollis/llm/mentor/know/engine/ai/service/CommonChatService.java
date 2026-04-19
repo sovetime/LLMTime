@@ -7,6 +7,7 @@ import dev.langchain4j.service.spring.AiService;
 import dev.langchain4j.service.spring.AiServiceWiringMode;
 import reactor.core.publisher.Flux;
 
+//模式选择
 @AiService(wiringMode = AiServiceWiringMode.EXPLICIT, streamingChatModel = "openAiStreamingChatModel", chatMemoryProvider = "chatMemoryProvider")
 public interface CommonChatService {
 

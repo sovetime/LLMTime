@@ -49,7 +49,6 @@ public class ChatController {
 
     /**
      * 流式对话接口
-     * <p>
      * 入参：userId、content（用户问题）、conversationId（可选）
      * 返回：SSE 流，每个 token 逐字推送；流结束前推送一条 [DONE] 事件携带 conversationId
      *
@@ -101,7 +100,9 @@ public class ChatController {
 
         // 3. 调用LLM流式对话
 
+        // 基于 LangChain4j 动态创建意图识别服务代理对象
         IntentRecognitionService intentRecognitionService = AiServices.builder(IntentRecognitionService.class).chatModel(chatModel).build();
+        // 调用大模型识别当前用户问题是否与知识库问答场景相关
         IntentRecognitionResult intentRecognitionResult = intentRecognitionService.chat(content);
 
         // 4. 如果用户问题不相关，使用一个通用的LLM做对话
