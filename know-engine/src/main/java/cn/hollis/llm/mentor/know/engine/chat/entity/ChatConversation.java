@@ -7,14 +7,18 @@ import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
-import java.time.LocalDateTime;
-
 /**
  * AI对话会话表
  */
 @Data
 @TableName("chat_conversation")
 public class ChatConversation extends BaseEntity {
+
+    /**
+     * 主键ID
+     */
+    @TableId(value = "id", type = IdType.AUTO)
+    private Long id;
 
     /**
      * 会话唯一标识

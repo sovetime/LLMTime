@@ -50,7 +50,7 @@ public class AgentTaskManager implements InitializingBean, DisposableBean {
     private final RTopic stopTopic;
 
     /**
-     * 本地任务映射（conversationId -> TaskInfo）
+     * 本地任务映射，会话id和任务进行绑定（conversationId -> TaskInfo）
      * 仅包含当前实例上运行的任务
      */
     private final Map<String, TaskInfo> taskMap = new ConcurrentHashMap<>();

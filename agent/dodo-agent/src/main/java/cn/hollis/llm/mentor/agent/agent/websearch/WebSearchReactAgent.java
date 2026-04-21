@@ -20,6 +20,8 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.api.Advisor;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.*;
+import org.springframework.ai.chat.metadata.ChatResponseMetadata;
+import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
@@ -247,8 +249,14 @@ public class WebSearchReactAgent extends BaseAgent {
                 .stream()
                 .chatResponse()
                 .publishOn(Schedulers.boundedElastic())
-                .doOnNext(chunk -> processChunk(chunk, sink, state))
-                .doOnComplete(() -> finishRound(messages, sink, state, roundCounter, hasSentFinalResult, finalAnswerBuffer, useMemory, conversationId, agentState, thinkingBuffer))
+                .doOnNext(chunk -> {
+                    collectUsage(chunk, state);
+                    processChunk(chunk, sink, state);
+                })
+                .doOnComplete(() -> {
+                    logRoundResult(state);
+                    finishRound(messages, sink, state, roundCounter, hasSentFinalResult, finalAnswerBuffer, useMemory, conversationId, agentState, thinkingBuffer);
+                })
                 .doOnError(err -> {
                     if (!hasSentFinalResult.get()) {
                         hasSentFinalResult.set(true);
@@ -287,6 +295,69 @@ public class WebSearchReactAgent extends BaseAgent {
         if (text != null) {
             sink.tryEmitNext(createTextResponse(text));
             state.textBuffer.append(text);
+        }
+    }
+
+    private void collectUsage(ChatResponse chunk, RoundState state) {
+        if (chunk == null) {
+            return;
+        }
+
+        ChatResponseMetadata metadata = chunk.getMetadata();
+        if (metadata != null) {
+            Usage usage = metadata.getUsage();
+            if (usage != null) {
+                state.setPromptTokens(getMaxTokenValue(state.getPromptTokens(), usage.getPromptTokens()));
+                state.setCompletionTokens(getMaxTokenValue(state.getCompletionTokens(), usage.getCompletionTokens()));
+                state.setTotalTokens(getMaxTokenValue(state.getTotalTokens(), usage.getTotalTokens()));
+                state.setModel(metadata.getModel());
+                state.setResponseId(metadata.getId());
+            }
+        }
+
+        if (chunk.getResult() == null || chunk.getResult().getOutput() == null) {
+            return;
+        }
+
+        Generation gen = chunk.getResult();
+        List<AssistantMessage.ToolCall> toolCalls = gen.getOutput().getToolCalls();
+
+        if (!CollectionUtils.isEmpty(toolCalls)) {
+            log.info("大模型返回工具调用: {}", JSON.toJSONString(toolCalls));
+        }
+    }
+
+    private Integer getMaxTokenValue(Integer currentValue, Integer newValue) {
+        if (newValue == null) {
+            return currentValue;
+        }
+        if (currentValue == null) {
+            return newValue;
+        }
+        return Math.max(currentValue, newValue);
+    }
+
+    private void logRoundResult(RoundState state) {
+        if (state == null) {
+            return;
+        }
+
+        if (state.getTotalTokens() != null || state.getPromptTokens() != null || state.getCompletionTokens() != null) {
+            log.info("本轮大模型usage: promptTokens={}, completionTokens={}, totalTokens={}, model={}, id={}",
+                    state.getPromptTokens(),
+                    state.getCompletionTokens(),
+                    state.getTotalTokens(),
+                    state.getModel(),
+                    state.getResponseId());
+        }
+
+        if (state.getMode() == RoundMode.TOOL_CALL) {
+            log.info("本轮大模型输出为工具调用, toolCalls={}", JSON.toJSONString(state.getToolCalls()));
+            return;
+        }
+
+        if (StringUtils.isNotBlank(state.textBuffer.toString())) {
+            log.info("本轮大模型完整文本输出长度: {}", state.textBuffer.length());
         }
     }
 

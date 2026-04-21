@@ -22,4 +22,22 @@ public class RoundState {
     /** 工具调用列表 */
     public List<AssistantMessage.ToolCall> toolCalls = synchronizedList(new java.util.ArrayList<>());
 
+    /**
+     * websearch新增，其他模块没有加
+     */
+    /** 本轮输入token */
+    public Integer promptTokens;
+
+    /** 本轮输出token */
+    public Integer completionTokens;
+
+    /** 本轮总token */
+    public Integer totalTokens;
+
+    /** 本轮模型标识 */
+    public String model;
+
+    /** 本轮响应ID */
+    public String responseId;
+
 }

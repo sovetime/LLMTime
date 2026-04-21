@@ -243,60 +243,6 @@
     }
   },
   {
-    "id": 28,
-    "category": "客户关怀与运营",
-    "input": "上次保养的服务态度怎么样？方便做个评价吗？",
-    "expected": {
-      "related": true,
-      "intent": "客户关怀与运营"
-    }
-  },
-  {
-    "id": 29,
-    "category": "客户关怀与运营",
-    "input": "请问您对本次维修服务满意吗？",
-    "expected": {
-      "related": true,
-      "intent": "客户关怀与运营"
-    }
-  },
-  {
-    "id": 30,
-    "category": "客户关怀与运营",
-    "input": "我们周末有个新车品鉴会，您有兴趣参加吗？",
-    "expected": {
-      "related": true,
-      "intent": "客户关怀与运营"
-    }
-  },
-  {
-    "id": 31,
-    "category": "客户关怀与运营",
-    "input": "本月车主自驾游活动开始报名了",
-    "expected": {
-      "related": true,
-      "intent": "客户关怀与运营"
-    }
-  },
-  {
-    "id": 32,
-    "category": "客户关怀与运营",
-    "input": "我的会员积分怎么查询？能换什么？",
-    "expected": {
-      "related": true,
-      "intent": "客户关怀与运营"
-    }
-  },
-  {
-    "id": 33,
-    "category": "客户关怀与运营",
-    "input": "VIP会员有什么专属权益？",
-    "expected": {
-      "related": true,
-      "intent": "客户关怀与运营"
-    }
-  },
-  {
     "id": 34,
     "category": "投诉与维权",
     "input": "我刚提的新车，才开了一周，今天发现中控屏老是死机，太影响心情了！",

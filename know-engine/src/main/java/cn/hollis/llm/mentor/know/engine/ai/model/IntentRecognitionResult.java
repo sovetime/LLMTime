@@ -13,7 +13,7 @@ public record IntentRecognitionResult(
         @JsonPropertyDescription("用户问题是否与汽车领域相关：true-汽车相关问题，false-非汽车相关问题（如育儿、天气、政治等）")
         boolean related,
 
-        @JsonPropertyDescription("意图识别结果,售前咨询与购买、售后维修与保养、车辆使用与技术指导、投诉与维权、客户关怀与运营、闲聊与通用问答、其他")
+        @JsonPropertyDescription("意图识别结果,售前咨询与购买、售后维修与保养、车辆使用与技术指导、投诉与维权、汽车营销政策、闲聊与通用问答、其他")
         String intent,
 
         @JsonPropertyDescription("从用户输入中提取的关键实体信息")

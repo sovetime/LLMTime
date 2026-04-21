@@ -3,7 +3,9 @@ package cn.hollis.llm.mentor.know.engine.chat.entity;
 import cn.hollis.llm.mentor.know.engine.chat.constant.ChatMessageType;
 import cn.hollis.llm.mentor.know.engine.chat.constant.RetrievalSource;
 import cn.hollis.llm.mentor.know.engine.document.entity.BaseEntity;
+import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
 import lombok.AllArgsConstructor;
@@ -20,6 +22,12 @@ import java.util.Map;
 @Data
 @TableName(value = "chat_message", autoResultMap = true)
 public class ChatMessage extends BaseEntity {
+
+    /**
+     * 主键ID
+     */
+    @TableId(value = "id", type = IdType.AUTO)
+    private Long id;
 
     /**
      * 消息唯一标识
