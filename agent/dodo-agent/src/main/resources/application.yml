@@ -91,3 +91,9 @@ logging:
     io:
       modelcontextprotocol:
         client: ERROR
+
+sensitive:
+  word:
+    enabled: true
+    dictionary-path: sensitive-words.txt
+    mask-char: "*"

@@ -4,6 +4,8 @@ import cn.hollis.llm.mentor.agent.agent.deepresearch.PlanExecuteAgent;
 import cn.hollis.llm.mentor.agent.agent.file.FileReactAgent;
 import cn.hollis.llm.mentor.agent.agent.pptx.PPTBuilderAgent;
 import cn.hollis.llm.mentor.agent.agent.websearch.WebSearchReactAgent;
+import cn.hollis.llm.mentor.agent.sensitive.DfaSensitiveWordService;
+import cn.hollis.llm.mentor.agent.sensitive.SensitiveWordFilterResult;
 import cn.hollis.llm.mentor.agent.service.AgentTaskManager;
 import cn.hollis.llm.mentor.agent.service.AiSessionService;
 import cn.hollis.llm.mentor.agent.tool.FileContentService;
@@ -51,6 +53,9 @@ public class AgentController implements InitializingBean {
     @Autowired
     private MetasoSearchService metasoSearchService;
 
+    @Autowired
+    private DfaSensitiveWordService sensitiveWordService;
+
     /**
      * 网页搜索工具回调
      */
@@ -72,7 +77,7 @@ public class AgentController implements InitializingBean {
             // 使用持久化记忆加载历史记录
             ChatMemory persistentMemory = webSearchReactAgent.createPersistentChatMemory(conversationId, 30);
             webSearchReactAgent.setChatMemory(persistentMemory);
-            return webSearchReactAgent.stream(conversationId, query);
+            return webSearchReactAgent.stream(conversationId, filterQuery(query, conversationId, "webSearch"));
         } catch (Exception e) {
             log.error("处理网页搜索请求时发生错误: ", e);
             return Flux.error(e);
@@ -101,7 +106,7 @@ public class AgentController implements InitializingBean {
             // 使用持久化记忆加载历史记录
             ChatMemory persistentMemory = fileReactAgent.createPersistentChatMemory(conversationId, 30);
             fileReactAgent.setChatMemory(persistentMemory);
-            return fileReactAgent.stream(conversationId, query, fileId);
+            return fileReactAgent.stream(conversationId, filterQuery(query, conversationId, "file"), fileId);
         } catch (Exception e) {
             log.error("处理文件问答请求时发生错误: ", e);
             return Flux.error(e);
@@ -124,7 +129,7 @@ public class AgentController implements InitializingBean {
             // 使用持久化记忆加载历史记录
             ChatMemory persistentMemory = pptBuilderAgent.createPersistentChatMemory(conversationId, 30);
             pptBuilderAgent.setChatMemory(persistentMemory);
-            return pptBuilderAgent.execute(conversationId, query);
+            return pptBuilderAgent.execute(conversationId, filterQuery(query, conversationId, "pptx"));
         } catch (Exception e) {
             log.error("处理PPT Builder请求时发生错误: ", e);
             return Flux.error(e);
@@ -157,7 +162,7 @@ public class AgentController implements InitializingBean {
             ChatMemory persistentMemory = planExecuteAgent.createPersistentChatMemory(conversationId, 30);
             planExecuteAgent.setChatMemory(persistentMemory);
             // 调用 stream 方法开始流式处理
-            return planExecuteAgent.stream(conversationId, query);
+            return planExecuteAgent.stream(conversationId, filterQuery(query, conversationId, "deep"));
         } catch (Exception e) {
             log.error("处理深度研究请求时发生错误: ", e);
             return Flux.error(e);
@@ -264,5 +269,17 @@ public class AgentController implements InitializingBean {
                 .taskManager(taskManager)
                 .maxRounds(3)
                 .build();
+    }
+
+    /**
+     * 用户输入进入大模型前统一进行敏感词过滤
+     */
+    private String filterQuery(String query, String conversationId, String scene) {
+        SensitiveWordFilterResult filterResult = sensitiveWordService.filter(query);
+        if (filterResult.hit()) {
+            log.warn("检测到敏感词, scene={}, conversationId={}, hitWords={}, filteredQuery={}",
+                    scene, conversationId, filterResult.hitWords(), filterResult.filteredText());
+        }
+        return filterResult.filteredText();
     }
 }
