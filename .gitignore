@@ -10,6 +10,7 @@ target/
 .classpath
 .factorypath
 .project
+.claude
 .settings
 .springBeans
 .sts4-cache
