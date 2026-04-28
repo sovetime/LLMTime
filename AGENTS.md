@@ -59,3 +59,15 @@
 ## 安全与配置提示
 - 不要提交真实密钥，生产环境请使用环境变量或密钥管理服务。
 - 仓库启用了资源过滤，发布前请检查配置占位符是否正确替换。
+
+## graphify
+
+
+这个项目在 `graphify-out/` 目录下维护了一份 graphify 知识图谱
+
+规则：
+- 仅在处理 `agent/dodo-agent` 项目相关问题时读取和使用 graphify，其他项目默认不读取，因为尚未建立对应图谱
+- 在回答架构或代码库相关问题之前，先阅读 `graphify-out/GRAPH_REPORT.md`，了解关键枢纽节点和社区结构
+- 如果存在 `graphify-out/wiki/index.md`，优先通过它进行导航，而不是直接读取原始文件
+- 对于跨模块的“X 和 Y 是什么关系”这类问题，优先使用 `graphify query "<问题>"`、`graphify path "<A>" "<B>"` 或 `graphify explain "<概念>"`，不要优先用 `grep`，因为这些命令会基于图谱中的 EXTRACTED 和 INFERRED 边进行遍历，而不是简单扫描文本
+- 在本次会话中修改代码文件后，执行 `graphify update .` 来更新图谱（仅 AST 分析，不会产生 API 成本）

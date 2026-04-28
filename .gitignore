@@ -33,3 +33,14 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### graphify ###
+graphify-out/
+*.graphify.json
+.graphify_chunks.json
+
+### Codex ###
+.codex/
+
+### Claude ###
+.claude/
