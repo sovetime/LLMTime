@@ -86,6 +86,13 @@ langchain4j:
       base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
       log-requests: true
       log-responses: true
+  community:
+    neo4j:
+      await-index-timeout: 300
+      auth:
+        uri: bolt://localhost:7687
+        user: neo4j
+        password: neo4j666
 
 elasticsearch:
   host: http://127.0.0.1:9200
@@ -100,6 +107,11 @@ minio:
   secretKey: minioadmin
   bucketName: know-engine
   endpoint: http://localhost:9000
+
+neo4j:
+  uri: bolt://localhost:7687
+  username: neo4j
+  password: neo4j666
 
 # 文件解析服务配置
 file:

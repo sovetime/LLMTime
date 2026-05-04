@@ -225,6 +225,48 @@
         .message.user .message-time {
             text-align: right;
         }
+        .message-references {
+            margin-top: 10px;
+            padding-top: 8px;
+            border-top: 1px dashed #e0e0e0;
+        }
+        .references-label {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 4px;
+        }
+        .references-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .reference-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 10px;
+            background: #f0f4ff;
+            border: 1px solid #d0d8f0;
+            border-radius: 6px;
+            font-size: 12px;
+            color: #4a6cf7;
+            text-decoration: none;
+            transition: background-color 0.2s, border-color 0.2s;
+            max-width: 100%;
+        }
+        .reference-item:hover {
+            background: #e0e8ff;
+            border-color: #4a6cf7;
+        }
+        .reference-index {
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+        .reference-title {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
         .typing-indicator {
             display: flex;
             gap: 4px;
@@ -242,6 +284,48 @@
         @keyframes bounce {
             0%, 80%, 100% { transform: scale(0); }
             40% { transform: scale(1); }
+        }
+        .progress-list {
+            margin-bottom: 8px;
+        }
+        .progress-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 0;
+            font-size: 13px;
+            color: #888;
+            transition: color 0.3s;
+        }
+        .progress-item.done {
+            color: #28a745;
+        }
+        .progress-item.active {
+            color: #667eea;
+        }
+        .progress-item .progress-icon {
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .progress-item.done .progress-icon {
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .progress-item .progress-spinner {
+            width: 12px;
+            height: 12px;
+            border: 2px solid #e0e0e0;
+            border-top: 2px solid #667eea;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
         .welcome-message {
             text-align: center;
@@ -508,15 +592,21 @@
                 return;
             }
 
-            messagesContainer.innerHTML = messages.map(msg => `
-                <div class="message ${msg.type === 'USER' ? 'user' : 'assistant'}">
-                    <div class="message-avatar">${msg.type === 'USER' ? '👤' : '🤖'}</div>
-                    <div class="message-content">
-                        <div>${escapeHtml(msg.content)}</div>
-                        <div class="message-time">${formatTime(msg.createTime)}</div>
+            messagesContainer.innerHTML = messages.map(msg => {
+                const refsHtml = msg.ragReferences && msg.ragReferences.length > 0
+                    ? buildReferencesHtml(msg.ragReferences)
+                    : '';
+                return `
+                    <div class="message ${msg.type === 'USER' ? 'user' : 'assistant'}">
+                        <div class="message-avatar">${msg.type === 'USER' ? '👤' : '🤖'}</div>
+                        <div class="message-content">
+                            <div>${escapeHtml(msg.content)}</div>
+                            ${refsHtml}
+                            <div class="message-time">${formatTime(msg.createTime)}</div>
+                        </div>
                     </div>
-                </div>
-            `).join('');
+                `;
+            }).join('');
 
             scrollToBottom();
         }
@@ -537,6 +627,7 @@
 
             // 显示AI正在输入
             const aiMessageElement = appendMessage('assistant', '', true);
+            aiMessageElement.progressSteps = [];
             isStreaming = true;
             sendBtn.disabled = true;
 
@@ -588,7 +679,28 @@
                             if (data === '[DONE]') {
                                 continue;
                             }
-                            // 累积内容
+                            // 检查是否是进度通知
+                            if (data.startsWith('[PROGRESS]:')) {
+                                const progressMsg = data.substring(11).trim();
+                                updateProgressStatus(aiMessageElement, progressMsg);
+                                continue;
+                            }
+                            // 检查是否是引用资料
+                            if (data.startsWith('[REFERENCE]:')) {
+                                const refJson = data.substring(12).trim();
+                                try {
+                                    const refs = JSON.parse(refJson);
+                                    aiMessageElement.references = refs;
+                                    renderReferences(aiMessageElement, refs);
+                                } catch (e) {
+                                    console.error('解析引用数据失败:', e);
+                                }
+                                continue;
+                            }
+                            // 累积内容（收到实际内容后，将最后一个进度标记为已完成）
+                            if (fullContent === '') {
+                                markAllProgressDone(aiMessageElement);
+                            }
                             fullContent += data;
                             updateMessageContent(aiMessageElement, fullContent);
                         } else if (line.trim() && !line.startsWith(':')) {
@@ -618,6 +730,7 @@
                 isStreaming = false;
                 sendBtn.disabled = false;
                 removeTypingIndicator(aiMessageElement);
+                markAllProgressDone(aiMessageElement);
                 scrollToBottom();
             }
         }
@@ -652,11 +765,123 @@
             scrollToBottom();
         }
 
+        // 构建引用资料HTML
+        function buildReferencesHtml(references) {
+            if (!references || references.length === 0) return '';
+            const uniqueRefs = [];
+            const seen = new Set();
+            for (const ref of references) {
+                const key = (ref.documentTitle || '') + '|' + (ref.url || '');
+                if (!seen.has(key)) {
+                    seen.add(key);
+                    uniqueRefs.push(ref);
+                }
+            }
+            return `
+                <div class="message-references">
+                    <div class="references-label">参考来源：</div>
+                    <div class="references-list">
+                        ${uniqueRefs.map((ref, idx) => `
+                            <a href="${ref.url || '#'}" target="_blank" class="reference-item" title="${escapeHtml(ref.documentTitle || '')}">
+                                <span class="reference-index">[${idx + 1}]</span>
+                                <span class="reference-title">${escapeHtml(ref.documentTitle || '未知文档')}</span>
+                            </a>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        // 渲染引用资料到消息元素
+        function renderReferences(messageElement, references) {
+            const contentEl = messageElement.querySelector('.message-content');
+            if (!contentEl) return;
+
+            // 移除已有的引用区域
+            const existingRefs = contentEl.querySelector('.message-references');
+            if (existingRefs) existingRefs.remove();
+
+            const refsHtml = buildReferencesHtml(references);
+            if (!refsHtml) return;
+
+            // 插入到 message-time 之前
+            const timeEl = contentEl.querySelector('.message-time');
+            if (timeEl) {
+                timeEl.insertAdjacentHTML('beforebegin', refsHtml);
+            } else {
+                contentEl.insertAdjacentHTML('beforeend', refsHtml);
+            }
+        }
+
         // 移除打字指示器
         function removeTypingIndicator(messageElement) {
             const typingIndicator = messageElement.querySelector('.typing-indicator');
             if (typingIndicator) {
                 typingIndicator.remove();
+            }
+        }
+
+        // 更新进度状态：依次展示所有进度，新进度到来时将上一个标记为已完成
+        function updateProgressStatus(messageElement, progressMsg) {
+            const contentEl = messageElement.querySelector('.message-content');
+            if (!contentEl) return;
+
+            // 移除打字指示器（如果存在）
+            removeTypingIndicator(messageElement);
+
+            const steps = messageElement.progressSteps || [];
+            // 将上一个进度标记为已完成
+            if (steps.length > 0) {
+                steps[steps.length - 1].done = true;
+            }
+            // 添加新进度
+            steps.push({ msg: progressMsg, done: false });
+            messageElement.progressSteps = steps;
+
+            renderProgressList(contentEl, steps);
+            scrollToBottom();
+        }
+
+        // 标记最后一个进度为已完成
+        function markAllProgressDone(messageElement) {
+            const contentEl = messageElement.querySelector('.message-content');
+            if (!contentEl) return;
+            const steps = messageElement.progressSteps || [];
+            if (steps.length > 0) {
+                steps[steps.length - 1].done = true;
+                messageElement.progressSteps = steps;
+                renderProgressList(contentEl, steps);
+            }
+        }
+
+        // 渲染进度列表（始终插入到正文内容之前）
+        function renderProgressList(contentEl, steps) {
+            let listEl = contentEl.querySelector('.progress-list');
+            if (!listEl) {
+                listEl = document.createElement('div');
+                listEl.className = 'progress-list';
+            }
+            listEl.innerHTML = steps.map(step => `
+                <div class="progress-item ${step.done ? 'done' : 'active'}">
+                    <span class="progress-icon">${step.done ? '✓' : '<div class="progress-spinner"></div>'}</span>
+                    <span>${escapeHtml(step.msg)}</span>
+                </div>
+            `).join('');
+
+            // 将进度列表插入到正文 .message-text 之前，确保正文输出在进度下方
+            const textEl = contentEl.querySelector('.message-text');
+            if (textEl) {
+                contentEl.insertBefore(listEl, textEl);
+            } else {
+                contentEl.appendChild(listEl);
+            }
+        }
+
+        // 移除进度状态（兼容性保留，当前主流程已不再调用）
+        function removeProgressStatus(messageElement) {
+            const progressEl = messageElement.querySelector('.progress-list');
+            if (progressEl) {
+                progressEl.remove();
             }
         }
 

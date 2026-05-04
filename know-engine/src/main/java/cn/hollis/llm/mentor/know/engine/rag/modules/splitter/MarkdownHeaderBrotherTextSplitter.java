@@ -209,7 +209,7 @@ public class MarkdownHeaderBrotherTextSplitter implements DocumentSplitter {
                             initialMetadata.put(name, headerType.getData());
                             initialMetadata.put(HEADER_LEVEL, currentHeaderLevel);
                             // 为每个分段生成唯一ID，用于后续建立父子关系
-                            String currentChunkId = UUID.randomUUID().toString();
+                            String currentChunkId = SnowflakeIdGenerator.getInstance().nextIdStr();
                             initialMetadata.put(CHUNK_ID, currentChunkId);
                         }
 

@@ -2,6 +2,7 @@ package cn.hollis.llm.mentor.know.engine.rag.modules;
 
 import cn.hollis.llm.mentor.know.engine.infra.json.JsonUtil;
 import cn.hollis.llm.mentor.know.engine.rag.model.QueryRouteResult;
+import cn.hollis.llm.mentor.know.engine.rag.modules.splitter.ProgressAwareContentRetriever;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONException;
 import dev.langchain4j.community.rag.content.retriever.neo4j.Neo4jText2CypherRetriever;
@@ -19,17 +20,21 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import static dev.langchain4j.internal.Utils.getOrDefault;
 
 /**
  * 查询路由器
+ * <p>
  * 基于 LLM 智能判断用户查询意图，将查询路由到最合适的内容检索器。
  * 支持三种数据源路由策略：
- * 1.关系型数据库 (relational_db)</b>：适用于结构化数据查询，如车辆信息、保险信息、订单信息等</li>
- * 2.图数据库 (graph_db)</b>：适用于实体关系查询，如车型关系、影响链、层级结构等</li>
- * 3.知识库 (knowledge_base)</b>：适用于语义相似性查询，如售前咨询、售后支持、技术问题等</li>
+ * <ul>
+ *   <li><b>关系型数据库 (relational_db)</b>：适用于结构化数据查询，如车辆信息、保险信息、订单信息等</li>
+ *   <li><b>图数据库 (graph_db)</b>：适用于实体关系查询，如车型关系、影响链、层级结构等</li>
+ *   <li><b>知识库 (knowledge_base)</b>：适用于语义相似性查询，如售前咨询、售后支持、技术问题等</li>
  * </ul>
  * <p>
  * <b>路由决策流程：</b>
@@ -47,21 +52,35 @@ import static dev.langchain4j.internal.Utils.getOrDefault;
 @Slf4j
 public class KnowEngineQueryRouter implements QueryRouter {
 
-    //
     private final Collection<ContentRetriever> contentRetrievers;
 
     protected final PromptTemplate promptTemplate;
 
     private final ChatModel chatModel;
 
+    /**
+     * 进度回调，用于流式返回前端进度信息
+     */
+    private final Consumer<String> progressCallback;
+
+    /**
+     * 确保路由进度只发送一次（DefaultRetrievalAugmentor 可能对多个 query 多次调用 route）
+     */
+    private final AtomicBoolean routeProgressSent = new AtomicBoolean(false);
+
     public KnowEngineQueryRouter(Collection<ContentRetriever> contentRetrievers, ChatModel chatModel) {
-        this(contentRetrievers, QUERY_ROUTE_PROMPT, chatModel);
+        this(contentRetrievers, QUERY_ROUTE_PROMPT, chatModel, null);
     }
 
-    public KnowEngineQueryRouter(Collection<ContentRetriever> contentRetrievers, PromptTemplate promptTemplate, ChatModel chatModel) {
+    public KnowEngineQueryRouter(Collection<ContentRetriever> contentRetrievers, ChatModel chatModel, Consumer<String> progressCallback) {
+        this(contentRetrievers, QUERY_ROUTE_PROMPT, chatModel, progressCallback);
+    }
+
+    public KnowEngineQueryRouter(Collection<ContentRetriever> contentRetrievers, PromptTemplate promptTemplate, ChatModel chatModel, Consumer<String> progressCallback) {
         this.promptTemplate = getOrDefault(promptTemplate, QUERY_ROUTE_PROMPT);
         this.contentRetrievers = contentRetrievers;
         this.chatModel = chatModel;
+        this.progressCallback = progressCallback;
     }
 
     private static final PromptTemplate QUERY_ROUTE_PROMPT = PromptTemplate.from("""
@@ -105,21 +124,46 @@ public class KnowEngineQueryRouter implements QueryRouter {
 
     @Override
     public Collection<ContentRetriever> route(Query query) {
+        // 发送进度：开始问题路由（仅发送一次，避免多个 query 导致重复）
+        if (progressCallback != null && routeProgressSent.compareAndSet(false, true)) {
+            progressCallback.accept("[PROGRESS]:正在路由您的问题...");
+            System.out.println("[PROGRESS]:正在路由您的问题...");
+        }
+
         String response = chatModel.chat(createPrompt(query).text());
 
         try {
-            //对大模型返回参数进行处理，修复可能的json问题
             QueryRouteResult queryRouteResult = JSON.parseObject(JsonUtil.fixJson(response), QueryRouteResult.class);
-            //根据推荐策略查询关系型数据库、图数据库、向量库
             String strategy = queryRouteResult.strategy();
             log.info("Route Success , query: {} , strategy: {}", query, strategy);
+
             switch (strategy) {
                 case "relational_db":
-                    return contentRetrievers.stream().filter(retriever -> retriever instanceof SqlDatabaseContentRetriever).collect(Collectors.toList());
+                    return contentRetrievers.stream().filter(retriever ->
+                    {
+                        if (retriever instanceof ProgressAwareContentRetriever) {
+                            return ((ProgressAwareContentRetriever) retriever).getDelegate() instanceof SqlDatabaseContentRetriever;
+                        }
+
+                        return retriever instanceof SqlDatabaseContentRetriever;
+
+                    }).collect(Collectors.toList());
                 case "graph_db":
-                    return contentRetrievers.stream().filter(retriever -> retriever instanceof Neo4jText2CypherRetriever).collect(Collectors.toList());
+                    return contentRetrievers.stream().filter(retriever ->
+                    {
+                        if (retriever instanceof ProgressAwareContentRetriever) {
+                            return ((ProgressAwareContentRetriever) retriever).getDelegate() instanceof Neo4jText2CypherRetriever;
+                        }
+                        return retriever instanceof Neo4jText2CypherRetriever;
+
+                    }).collect(Collectors.toList());
                 case "knowledge_base":
-                    return contentRetrievers.stream().filter(retriever -> retriever instanceof AbstractElasticsearchEmbeddingStore).collect(Collectors.toList());
+                    return contentRetrievers.stream().filter(retriever -> {
+                        if (retriever instanceof ProgressAwareContentRetriever) {
+                            return ((ProgressAwareContentRetriever) retriever).getDelegate() instanceof AbstractElasticsearchEmbeddingStore;
+                        }
+                        return retriever instanceof AbstractElasticsearchEmbeddingStore;
+                    }).collect(Collectors.toList());
                 default:
                     return contentRetrievers;
             }
@@ -141,5 +185,6 @@ public class KnowEngineQueryRouter implements QueryRouter {
         variables.put("query", query.text());
         return promptTemplate.apply(variables);
     }
+
 
 }

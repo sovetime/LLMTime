@@ -95,7 +95,7 @@ CREATE TABLE `chat_message` (
     `message_id`       VARCHAR(64)  NOT NULL COMMENT '消息唯一标识',
     `conversation_id`  VARCHAR(64)  NOT NULL COMMENT '所属会话ID',
     `type`             VARCHAR(32)  NOT NULL COMMENT '角色：USER/ASSISTANT',
-    `content`          LONGTEXT     NOT NULL COMMENT '消息内容',
+    `content`          LONGTEXT         NULL COMMENT '消息内容',
     `transform_content` LONGTEXT    NULL     COMMENT '改写后的内容',
     `token_count`      INT          NULL     COMMENT 'Token数量',
     `model_name`       VARCHAR(128) NULL     COMMENT '使用的模型名称',

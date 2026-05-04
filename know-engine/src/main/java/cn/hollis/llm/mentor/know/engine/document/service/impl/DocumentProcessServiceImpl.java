@@ -13,6 +13,7 @@ import cn.hollis.llm.mentor.know.engine.document.event.DocumentConvertedEvent;
 import cn.hollis.llm.mentor.know.engine.document.service.*;
 import cn.hollis.llm.mentor.know.engine.document.util.FileTypeUtil;
 import cn.hollis.llm.mentor.know.engine.infra.lock.DistributeLock;
+import cn.hollis.llm.mentor.know.engine.rag.constant.MetadataKeyConstant;
 import cn.hollis.llm.mentor.know.engine.rag.modules.splitter.DocumentSplitterFactory;
 import cn.hollis.llm.mentor.know.engine.rag.modules.splitter.ExcelSplitter;
 import com.alibaba.fastjson2.JSON;
@@ -167,14 +168,19 @@ public class DocumentProcessServiceImpl implements DocumentProcessService {
             TextSegment segment = segments.get(i);
             KnowledgeSegment knowledgeSegment = new KnowledgeSegment();
             knowledgeSegment.setText(segment.text());
-            knowledgeSegment.setChunkId(segment.metadata().getString("chunkId"));
-            //todo metadata统一处理
-            knowledgeSegment.setMetadata(JSON.toJSONString(segment.metadata().toMap()));
+            knowledgeSegment.setChunkId(segment.metadata().getString(MetadataKeyConstant.CHUNK_ID));
+            Metadata metadata = segment.metadata();
+            metadata.put(MetadataKeyConstant.DOC_ID, document.getDocId());
+            metadata.put(MetadataKeyConstant.FILE_NAME, document.getDocTitle());
+            metadata.put(MetadataKeyConstant.URL, document.getDocUrl());
+
+            //todo metadata统一处理(权限相关、多版本相关）
+            knowledgeSegment.setMetadata(JSON.toJSONString(metadata.toMap()));
             knowledgeSegment.setDocumentId(document.getDocId());
             knowledgeSegment.setChunkOrder(i);
 
             // 检查是否需要跳过嵌入
-            Integer skipEmbedding = segment.metadata().getInteger("skipEmbedding");
+            Integer skipEmbedding = metadata.getInteger(MetadataKeyConstant.SKIP_EMBEDDING);
             if (skipEmbedding != null && skipEmbedding == 1) {
                 knowledgeSegment.setSkipEmbedding(1);
                 knowledgeSegment.setStatus(SegmentStatus.STORED);
@@ -269,6 +275,7 @@ public class DocumentProcessServiceImpl implements DocumentProcessService {
 
     /**
      * 发送文档已转换事件
+     *
      * @Deprecated 不再使用事件驱动，靠用户在前端手动触发分段，因为需要用户选择分段方式。
      */
     @Deprecated

@@ -4,7 +4,6 @@ import cn.hollis.llm.mentor.know.engine.chat.constant.ChatMessageType;
 import cn.hollis.llm.mentor.know.engine.chat.entity.ChatMessage;
 import cn.hollis.llm.mentor.know.engine.chat.mapper.ChatMessageMapper;
 import cn.hollis.llm.mentor.know.engine.chat.service.ChatMessageService;
-import cn.hollis.llm.mentor.know.engine.infra.snowflake.SnowflakeIdGenerator;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -57,18 +56,29 @@ public class ChatMessageServiceImpl extends ServiceImpl<ChatMessageMapper, ChatM
     }
 
     @Override
-    public String saveAssistantMessage(String conversationId, String content, String modelName,
-                                       Integer tokenCount, List<ChatMessage.RagReference> ragReferences) {
+    public void updateRagReferences(String messageId, List<ChatMessage.RagReference> ragReferences) {
+        ChatMessage update = new ChatMessage();
+        update.setRagReferences(ragReferences);
+        this.update(update, new LambdaQueryWrapper<ChatMessage>()
+                .eq(ChatMessage::getMessageId, messageId));
+    }
+
+    @Override
+    public void updateContent(String messageId, String content) {
+        ChatMessage update = new ChatMessage();
+        update.setContent(content);
+        this.update(update, new LambdaQueryWrapper<ChatMessage>()
+                .eq(ChatMessage::getMessageId, messageId));
+    }
+
+    @Override
+    public String saveAssistantMessage(String conversationId) {
         String messageId = UUID.randomUUID().toString().replace("-", "");
 
         ChatMessage message = new ChatMessage();
         message.setMessageId(messageId);
         message.setConversationId(conversationId);
         message.setType(ChatMessageType.ASSISTANT);
-        message.setContent(content);
-        message.setModelName(modelName);
-        message.setTokenCount(tokenCount);
-        message.setRagReferences(ragReferences);
         message.setCreatedAt(LocalDateTime.now());
 
         this.save(message);

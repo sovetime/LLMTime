@@ -44,17 +44,27 @@ public interface ChatMessageService extends IService<ChatMessage> {
     void updateTransformContent(String messageId, String transformContent);
 
     /**
+     * 更新RAG引用内容
+      *
+      * @param messageId        消息ID
+      * @param ragReferences    RAG引用内容
+     */
+    void updateRagReferences(String messageId, List<ChatMessage.RagReference> ragReferences);
+
+    /**
+     * 更新消息内容
+     * @param messageId
+     * @param content
+     */
+    void updateContent(String messageId, String content);
+
+    /**
      * 对话完成后保存 Assistant 消息（插入新记录）
      *
      * @param conversationId 会话ID
-     * @param content        AI回复正文
-     * @param modelName      模型名称
-     * @param tokenCount     Token数量
-     * @param ragReferences  RAG引用内容
      * @return 新消息ID
      */
-    String saveAssistantMessage(String conversationId, String content, String modelName,
-                                Integer tokenCount, List<ChatMessage.RagReference> ragReferences);
+    String saveAssistantMessage(String conversationId);
 
     /**
      * 删除会话的所有消息
