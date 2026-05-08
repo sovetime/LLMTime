@@ -109,12 +109,15 @@ public class ChatApplicationService {
                         }
                     };
 
+                    // 预存一条空助手消息，后续流式输出完成时回填完整内容
                     String assistantMessageId = chatMessageService.saveAssistantMessage(chatParam.conversationId());
 
-                    // 构建查询改写器（带进度回调）
+                    // 查询改写器：基于历史消息改写用户问题，消除指代歧义（带进度回调）
                     KnowEngineQueryTransformer queryTransformer = new KnowEngineQueryTransformer(chatModel, chatParam.messageId(), callback);
 
-                    ProgressAwareContentRetriever embeddingRetriever = new ProgressAwareContentRetriever(KnowEngineElasticsearchContentRetriever.builder()
+                    // 向量检索：用 embedding 语义相似度匹配知识库片段
+                    ProgressAwareContentRetriever embeddingRetriever = new ProgressAwareContentRetriever(
+                            KnowEngineElasticsearchContentRetriever.builder()
                             .configuration(ElasticsearchConfigurationKnn.builder().build())
                             .maxResults(5)
                             .minScore(0.5)
@@ -124,39 +127,46 @@ public class ChatApplicationService {
                             .knowledgeSegmentService(knowledgeSegmentService)
                             .build(), callback);
 
-                    ProgressAwareContentRetriever fullTextRetriever = new ProgressAwareContentRetriever(ElasticsearchContentRetriever.builder()
+                    // 全文检索：用关键词匹配（ES 全文索引）
+                    ProgressAwareContentRetriever fullTextRetriever = new ProgressAwareContentRetriever(
+                            ElasticsearchContentRetriever.builder()
                             .configuration(ElasticsearchConfigurationFullText.builder().build())
                             .restClient(restClient)
                             .indexName(INDEX_NAME)
                             .maxResults(5)
                             .build(), callback);
 
-                    ProgressAwareContentRetriever sqlRetriever = new ProgressAwareContentRetriever(SqlDatabaseContentRetriever.builder().dataSource(dataSource)
-                            //todo
+                    // SQL 检索：将自然语言转为 SQL 查询数据库
+                    ProgressAwareContentRetriever sqlRetriever = new ProgressAwareContentRetriever(
+                            SqlDatabaseContentRetriever.builder().dataSource(dataSource)
+                            //todo 从资源文件加载 text-to-sql 提示词和表结构定义
                             .promptTemplate(new PromptTemplate("textToSqlPrompt.getContentAsString(UTF_8)"))
                             .databaseStructure("tablesSql.getContentAsString(UTF_8)")
                             .chatModel(chatModel)
                             .build(), callback);
 
-                    ProgressAwareContentRetriever neo4jRetriever = new ProgressAwareContentRetriever(Neo4jText2CypherRetriever.builder()
+                    // 图数据库检索：将自然语言转为 Cypher 查询 Neo4j
+                    ProgressAwareContentRetriever neo4jRetriever = new ProgressAwareContentRetriever(
+                            Neo4jText2CypherRetriever.builder()
                             .graph(Neo4jGraph.builder()
                                     .driver(neo4jDriver)
                                     .build())
                             .chatModel(chatModel)
                             .build(), callback);
 
+                    // BGE 重排序模型（ONNX 本地运行），对检索结果重新打分排序
                     OnnxScoringModel scoringModel = BgeScoringModel.getInstance();
 
-                    // 使用带进度通知的聚合器包装原始聚合器
+                    // 内容聚合器：整合多路检索结果 → 重排序 → 取 Top-K，并在聚合完成时发送"正在生成回答"进度
                     ContentAggregator contentAggregator = new ProgressAwareContentAggregator(
                             ReRankingContentAggregator.builder()
                                     .scoringModel(scoringModel)
                                     .maxResults(5)
                                     .querySelector(queryToContents -> queryToContents.keySet().iterator().next())
                                     .build(),
-                            callback, assistantMessageId, chatMessageService
-                    );
+                            callback, assistantMessageId, chatMessageService);
 
+                    //根据意图获取提示词
                     String prompt = promptService.getPrompt(chatParam.intentRecognitionResult());
 
                     ContentInjector contentInjector = new DefaultContentInjector(PromptTemplate.from(prompt));

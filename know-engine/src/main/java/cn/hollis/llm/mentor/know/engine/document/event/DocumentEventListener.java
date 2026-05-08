@@ -58,7 +58,9 @@ public class DocumentEventListener {
                 documentId, event.getSegmentCount());
 
         try {
+            //获取文档
             KnowledgeDocument document = knowledgeDocumentService.getById(documentId);
+            // 向量化存储
             boolean success = documentProcessService.embedAndStore(document);
             log.info("向量嵌入完成，documentId: {}, success: {}", documentId, success);
         } catch (Exception e) {

@@ -64,7 +64,6 @@ import static cn.hollis.llm.mentor.know.engine.rag.config.ElasticSearchConfigura
 @RequestMapping("/ai/module")
 public class RagModuleController {
 
-
     @Autowired
     private ChatModel chatModel;
 

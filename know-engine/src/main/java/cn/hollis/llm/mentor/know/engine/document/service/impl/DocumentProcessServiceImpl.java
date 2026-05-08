@@ -78,8 +78,9 @@ public class DocumentProcessServiceImpl implements DocumentProcessService {
     @Value("${minio.bucketName}")
     private String bucketName;
 
+    //对uplocalUser加锁,限制同一个用户同时上传多份文件
     @Override
-    @DistributeLock(scene = "document-upload", keyExpression = "#uploadUser", waitTime = 0)
+    @DistributeLock(scene = "document-upload", keyExpression = "#documentUploadParam.uploadUser", waitTime = 0)
     public KnowledgeDocument upload(DocumentUploadParam documentUploadParam) throws IOException {
         try {
             log.info("start to upload ....");
@@ -102,6 +103,7 @@ public class DocumentProcessServiceImpl implements DocumentProcessService {
             boolean result = knowledgeDocumentService.save(document);
             Assert.isTrue(result, "文件上传失败");
 
+            //获取对应的文件处理服务
             FileProcessService fileProcessService = fileProcessServiceFactory.get(FileTypeUtil.getFileType(fileName, documentUploadParam.file()), document.getKnowledgeBaseType());
             if (fileProcessService != null) {
                 fileProcessService.processDocument(document, documentUploadParam.file().getInputStream());
@@ -128,33 +130,34 @@ public class DocumentProcessServiceImpl implements DocumentProcessService {
     @Transactional
     @DistributeLock(scene = "document-split", keyExpression = "#document.docId", waitTime = 0)
     public int split(KnowledgeDocument document, DocumentSplitParam documentSplitParam) {
-        // 1. 查询文档
         Assert.notNull(document, "文档不存在");
         Assert.notNull(document.getConvertedDocUrl(), "文档未转换完成");
 
+        //文档已经切分
         if (document.getStatus() == DocumentStatus.CHUNKED) {
             // 返回已切分的分段数量
             Long chunkedCount = knowledgeSegmentService.count(new QueryWrapper<KnowledgeSegment>().eq("document_id", document.getDocId()).eq("skipEmbedding", 0));
             return chunkedCount.intValue();
         }
-
         if (document.getStatus() != DocumentStatus.CONVERTED) {
             throw new RuntimeException("文档状态不为CONVERTED，无法完成切分");
         }
 
-        // 2. 从MinIO下载文件内容
+        //从MinIO下载文件内容
         String convertedDocUrl = document.getConvertedDocUrl();
         String objectName = extractObjectNameFromUrl(convertedDocUrl);
         Assert.notNull(objectName, "无法解析文档URL");
 
         List<KnowledgeSegment> knowledgeSegments = new ArrayList<>();
         List<TextSegment> segments = new ArrayList<>();
+        // 从 MinIO 下载文件内容并根据文档类型选择分段方式
         try (InputStream inputStream = fileStorageService.downloadFile(objectName)) {
-            //EXCEL单独处理，因为他不是Document类型
+            // Excel/CSV 有结构化行列，不能按文本分段，需用专用分段器按行/列拆分
             if (FileType.EXCEL == FileTypeUtil.getFileType(document.getConvertedDocUrl()) || FileType.CSV == FileTypeUtil.getFileType(document.getConvertedDocUrl())) {
                 ExcelSplitter splitter = new ExcelSplitter(documentSplitParam.chunkSize(), false);
                 segments = splitter.split(inputStream.readAllBytes());
             } else {
+                // 其他文本类文档根据 splitType 选择对应的分段器（标题/长度/分隔符/正则/智能）
                 DocumentSplitter splitter = DocumentSplitterFactory.getInstance(documentSplitParam);
                 Document doc = Document.from(new String(inputStream.readAllBytes(), StandardCharsets.UTF_8));
                 segments = splitter.split(doc);
@@ -163,7 +166,7 @@ public class DocumentProcessServiceImpl implements DocumentProcessService {
             throw new RuntimeException("下载文档失败: " + e.getMessage(), e);
         }
 
-        // 4. 转换为 KnowledgeSegment 并保存
+        // 转换为 KnowledgeSegment 并保存
         for (int i = 0; i < segments.size(); i++) {
             TextSegment segment = segments.get(i);
             KnowledgeSegment knowledgeSegment = new KnowledgeSegment();
@@ -192,7 +195,7 @@ public class DocumentProcessServiceImpl implements DocumentProcessService {
             knowledgeSegments.add(knowledgeSegment);
         }
 
-        // 5. 批量保存片段
+        //批量保存片段
         Stopwatch stopwatch = Stopwatch.createStarted();
         boolean saveResult = knowledgeSegmentService.saveBatch(knowledgeSegments);
         Assert.isTrue(saveResult, "保存知识片段失败");
@@ -200,7 +203,7 @@ public class DocumentProcessServiceImpl implements DocumentProcessService {
 
         int segmentCount = knowledgeSegments.size();
 
-        // 6. 更新文档状态为 CHUNKED
+        //更新文档状态为 CHUNKED
         document.setStatus(DocumentStatus.CHUNKED);
         boolean updateResult = knowledgeDocumentService.updateById(document);
         Assert.isTrue(updateResult, "更新文档状态失败");
@@ -211,13 +214,13 @@ public class DocumentProcessServiceImpl implements DocumentProcessService {
         return segmentCount;
     }
 
+    //向量化存储
     @Override
     @DistributeLock(scene = "document-split", keyExpression = "#document.docId", waitTime = 0)
     public boolean embedAndStore(KnowledgeDocument document) {
         if (document == null) {
             return false;
         }
-
         if (document.getStatus() == DocumentStatus.VECTOR_STORED) {
             return true;
         }
@@ -233,6 +236,7 @@ public class DocumentProcessServiceImpl implements DocumentProcessService {
                 .isNull(KnowledgeSegment::getEmbeddingId)
                 .eq(KnowledgeSegment::getSkipEmbedding, 0);
 
+        // 分页查询，每页 100 条待向量化的分段
         Page<KnowledgeSegment> page = knowledgeSegmentService.page(new Page<>(1, 100), queryWrapper);
 
         while (page.getCurrent() == 1 || page.hasNext()) {
@@ -259,14 +263,13 @@ public class DocumentProcessServiceImpl implements DocumentProcessService {
             page = knowledgeSegmentService.page(new Page<>(page.getCurrent() + 1, 100), queryWrapper);
         }
 
-        //double check
+        // 二次校验是否所有分段都已向量化成功
         long segmentCount = knowledgeSegmentService.count(queryWrapper);
         if (segmentCount == 0) {
             // 更新文档状态
             document.setStatus(DocumentStatus.VECTOR_STORED);
             return knowledgeDocumentService.updateById(document);
         }
-
         log.warn("向量存储失败，存在部分分段没有存储成功，未成功的数量： " + segmentCount);
         return false;
     }

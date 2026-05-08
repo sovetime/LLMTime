@@ -51,7 +51,6 @@ public class FileStorageService {
                 .contentType(file.getContentType())
                 .build());
         return String.format("%s/%s/%s", endpoint, bucketName, objectName);
-
     }
 
     /**

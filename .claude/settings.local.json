@@ -4,7 +4,9 @@
       "Bash(docker pull:*)",
       "Bash(docker run:*)",
       "Bash(docker stop:*)",
-      "Bash(docker rm:*)"
+      "Bash(docker rm:*)",
+      "Bash(python3 *)",
+      "PowerShell(Out-Null *)"
     ]
   }
 }

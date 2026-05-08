@@ -60,7 +60,6 @@ public class KnowledgeDocumentController {
 
     /**
      * 对文档进行切分
-     * 注意：此方法为手动触发切分接口，正常流程由事件驱动自动执行
      *
      * @param documentId 文档ID
      * @return 切分后的片段数量
@@ -74,7 +73,9 @@ public class KnowledgeDocumentController {
                                  @RequestParam(value = "titleLevel", required = false) Integer titleLevel,
                                  @RequestParam(value = "separator", required = false) String separator
     ) {
+        //获取文档
         KnowledgeDocument document = knowledgeDocumentService.getById(documentId);
+        //对文档进行切分
         return documentProcessService.split(document, new DocumentSplitParam(splitType, chunkSize, overlap, titleLevel, separator, regex));
     }
 

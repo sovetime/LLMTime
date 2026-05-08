@@ -1,4 +1,4 @@
-package cn.hollis.llm.mentor.know.engine.rag.model.reranker;
+package cn.hollis.llm.mentor.know.engine.rag.modules.reranker;
 
 
 import dev.langchain4j.model.scoring.onnx.OnnxScoringModel;
