@@ -214,7 +214,22 @@ public class DocumentProcessServiceImpl implements DocumentProcessService {
         return segmentCount;
     }
 
-    //向量化存储
+    /**
+     * 对已分块的知识文档执行向量化并写入向量存储。
+     *
+     * 执行流程：
+     * 1. 分页扫描所有状态为 STORED 且尚未向量化的文档分段（每页 100 条）
+     * 2. 批量调用 Embedding 模型生成向量
+     * 3. 将向量写入 Elasticsearch 向量存储，获取 embeddingId
+     * 4. 回写每条分段的 embeddingId 并将状态更新为 VECTOR_STORED
+     * 5. 全量扫描完成后二次校验，确认无遗漏分段后将文档状态置为 VECTOR_STORED
+     *
+     * 并发控制：通过 @DistributeLock 对同一 docId 加分布式锁，waitTime=0 表示获取锁失败直接返回，
+     * 避免多实例并发重复向量化同一文档。
+     *
+     * @param document 待向量化的知识文档，状态须为 CHUNKED，否则直接返回 false
+     * @return 全部分段向量化成功并更新文档状态后返回 true；文档为 null、状态不符或存在分段未向量化时返回 false
+     */
     @Override
     @DistributeLock(scene = "document-split", keyExpression = "#document.docId", waitTime = 0)
     public boolean embedAndStore(KnowledgeDocument document) {
@@ -236,19 +251,21 @@ public class DocumentProcessServiceImpl implements DocumentProcessService {
                 .isNull(KnowledgeSegment::getEmbeddingId)
                 .eq(KnowledgeSegment::getSkipEmbedding, 0);
 
-        // 分页查询，每页 100 条待向量化的分段
+        // 首次加载第 1 页，每页 100 条；后续循环通过 page.hasNext() 判断是否继续翻页
         Page<KnowledgeSegment> page = knowledgeSegmentService.page(new Page<>(1, 100), queryWrapper);
-
         while (page.getCurrent() == 1 || page.hasNext()) {
             List<KnowledgeSegment> textSegmentsToEmbed = page.getRecords();
-            List<TextSegment> textSegments = textSegmentsToEmbed.stream().map(segment -> TextSegment.from(segment.getText(), Metadata.from(segment.getMetadataMap()))).toList();
-            // 获取嵌入向量
+            List<TextSegment> textSegments = textSegmentsToEmbed.stream()
+                    .map(segment -> TextSegment.from(segment.getText(), Metadata.from(segment.getMetadataMap())))
+                    .toList();
+
+            // 批量调用 Embedding 模型，一次 RPC 获取当前页所有分段的向量
             Response<List<Embedding>> embeddingResponse = openAiEmbeddingModel.embedAll(textSegments);
 
-            // 存储嵌入向量
+            // 将向量批量写入 Elasticsearch，返回各分段在 ES 中的文档 ID（embeddingId）
             List<String> embeddingIds = elasticsearchEmbeddingStore.addAll(embeddingResponse.content(), textSegments);
 
-            //todo 事务处理
+            // todo 事务处理：ES 写入与 DB 状态更新尚未纳入同一事务，需考虑补偿或幂等重试机制
 
             // 更新文档片段状态
             for (int i = 0; i < textSegmentsToEmbed.size(); i++) {
@@ -274,8 +291,6 @@ public class DocumentProcessServiceImpl implements DocumentProcessService {
         return false;
     }
 
-    // ==================== 事件发布方法 ====================
-
     /**
      * 发送文档已转换事件
      *
@@ -296,8 +311,6 @@ public class DocumentProcessServiceImpl implements DocumentProcessService {
         DocumentChunkedEvent event = new DocumentChunkedEvent(this, document.getDocId(), document, segmentCount);
         eventPublisher.publishEvent(event);
     }
-
-    // ==================== 辅助方法 ====================
 
     /**
      * 通过后缀名判断是否为 PDF 文件

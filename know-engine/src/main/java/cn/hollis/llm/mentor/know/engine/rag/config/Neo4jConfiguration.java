@@ -12,7 +12,6 @@ import org.springframework.context.annotation.Configuration;
 @EnableConfigurationProperties(Neo4jProperties.class)
 public class Neo4jConfiguration {
 
-
     @Autowired
     private Neo4jProperties properties;
 

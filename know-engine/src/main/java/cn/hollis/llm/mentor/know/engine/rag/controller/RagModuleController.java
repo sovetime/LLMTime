@@ -223,6 +223,7 @@ public class RagModuleController {
 
         IntentRecognitionResult intentRecognitionResult = AiServices.builder(IntentRecognitionService.class).chatModel(chatModel).build().chat(query);
         String prompt = promptService.getPrompt(intentRecognitionResult);
+        //根据意图对应的提示词模板，构建内容注入器（将检索结果注入到提示词中）
         ContentInjector contentInjector = new DefaultContentInjector(PromptTemplate.from(prompt));
 
         List<Content> testContents = List.of(

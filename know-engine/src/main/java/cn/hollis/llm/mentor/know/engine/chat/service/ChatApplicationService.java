@@ -115,19 +115,19 @@ public class ChatApplicationService {
                     // 查询改写器：基于历史消息改写用户问题，消除指代歧义（带进度回调）
                     KnowEngineQueryTransformer queryTransformer = new KnowEngineQueryTransformer(chatModel, chatParam.messageId(), callback);
 
-                    // 向量检索：用 embedding 语义相似度匹配知识库片段
+                    // 向量检索配置：用 embedding 语义相似度匹配知识库片段
                     ProgressAwareContentRetriever embeddingRetriever = new ProgressAwareContentRetriever(
                             KnowEngineElasticsearchContentRetriever.builder()
                             .configuration(ElasticsearchConfigurationKnn.builder().build())
                             .maxResults(5)
-                            .minScore(0.5)
+                            .minScore(0.5)  //相似度过滤阈值
                             .embeddingModel(openAiEmbeddingModel)
                             .restClient(restClient)
                             .indexName(INDEX_NAME)
                             .knowledgeSegmentService(knowledgeSegmentService)
                             .build(), callback);
 
-                    // 全文检索：用关键词匹配（ES 全文索引）
+                    // 全文检索配置：用关键词匹配（ES 全文索引）
                     ProgressAwareContentRetriever fullTextRetriever = new ProgressAwareContentRetriever(
                             ElasticsearchContentRetriever.builder()
                             .configuration(ElasticsearchConfigurationFullText.builder().build())
@@ -136,7 +136,7 @@ public class ChatApplicationService {
                             .maxResults(5)
                             .build(), callback);
 
-                    // SQL 检索：将自然语言转为 SQL 查询数据库
+                    // SQL 检索配置：将自然语言转为 SQL 查询数据库
                     ProgressAwareContentRetriever sqlRetriever = new ProgressAwareContentRetriever(
                             SqlDatabaseContentRetriever.builder().dataSource(dataSource)
                             //todo 从资源文件加载 text-to-sql 提示词和表结构定义
@@ -145,7 +145,7 @@ public class ChatApplicationService {
                             .chatModel(chatModel)
                             .build(), callback);
 
-                    // 图数据库检索：将自然语言转为 Cypher 查询 Neo4j
+                    // 图数据库检索配置：将自然语言转为 Cypher 查询 Neo4j
                     ProgressAwareContentRetriever neo4jRetriever = new ProgressAwareContentRetriever(
                             Neo4jText2CypherRetriever.builder()
                             .graph(Neo4jGraph.builder()
@@ -159,6 +159,7 @@ public class ChatApplicationService {
 
                     // 内容聚合器：整合多路检索结果 → 重排序 → 取 Top-K，并在聚合完成时发送"正在生成回答"进度
                     ContentAggregator contentAggregator = new ProgressAwareContentAggregator(
+                            //
                             ReRankingContentAggregator.builder()
                                     .scoringModel(scoringModel)
                                     .maxResults(5)
@@ -168,7 +169,7 @@ public class ChatApplicationService {
 
                     //根据意图获取提示词
                     String prompt = promptService.getPrompt(chatParam.intentRecognitionResult());
-
+                    //构建内容注入器，将检索结果按提示词模板格式注入到用户消息中
                     ContentInjector contentInjector = new DefaultContentInjector(PromptTemplate.from(prompt));
 
                     // 构建查询路由器（带进度回调）
@@ -179,6 +180,7 @@ public class ChatApplicationService {
                             .contentInjector(contentInjector)
                             .build();
 
+                    //构建 AI Service：将 ChatModel、ChatMemory、RAG 管道装配为声明式 AI 服务接口
                     KnowEngineChatAiService knowEngineChatAiService = AiServices.builder(KnowEngineChatAiService.class)
                             .chatModel(chatModel)
                             .streamingChatModel(streamingChatModel)

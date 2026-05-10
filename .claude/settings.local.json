@@ -6,7 +6,19 @@
       "Bash(docker stop:*)",
       "Bash(docker rm:*)",
       "Bash(python3 *)",
-      "PowerShell(Out-Null *)"
+      "PowerShell(Out-Null *)",
+      "Bash(jar tf *)",
+      "Bash(javap -c -p dev/langchain4j/store/embedding/elasticsearch/ElasticsearchConfigurationKnn)",
+      "Bash(java -cp \"C:\\\\Users\\\\22794\\\\.m2\\\\repository\\\\dev\\\\langchain4j\\\\langchain4j-elasticsearch\\\\1.11.0-beta19\\\\langchain4j-elasticsearch-1.11.0-beta19.jar\" -printsource --module jdk.jdeps)",
+      "Read(//mnt/c/Users/22794/.m2/repository/dev/langchain4j/langchain4j-elasticsearch/**)",
+      "Bash(javap -c -p -classpath langchain4j-elasticsearch-1.11.0-beta19.jar dev.langchain4j.store.embedding.elasticsearch.ElasticsearchEmbeddingStore)",
+      "PowerShell(& 'C:\\\\Program Files\\\\Java\\\\jdk-21\\\\bin\\\\javap.exe' -c -p -classpath \"C:\\\\Users\\\\22794\\\\.m2\\\\repository\\\\dev\\\\langchain4j\\\\langchain4j-elasticsearch\\\\1.11.0-beta19\\\\langchain4j-elasticsearch-1.11.0-beta19.jar\" dev.langchain4j.store.embedding.elasticsearch.ElasticsearchEmbeddingStore 2>&1 | Select-Object -First 200)",
+      "Read(//d/tmp/**)",
+      "Bash(jar xf *)",
+      "Bash(javap -c -p dev/langchain4j/rag/content/aggregator/ReRankingContentAggregator.class)",
+      "Bash(javap -c -p 'dev/langchain4j/rag/content/aggregator/ReRankingContentAggregator$ReRankingContentAggregatorBuilder.class')",
+      "Bash(javap -c -p dev/langchain4j/model/scoring/ScoringModel.class)",
+      "Bash(python -c ' *)"
     ]
   }
 }
