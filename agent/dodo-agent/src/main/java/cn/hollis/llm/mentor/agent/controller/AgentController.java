@@ -4,7 +4,7 @@ import cn.hollis.llm.mentor.agent.agent.deepresearch.PlanExecuteAgent;
 import cn.hollis.llm.mentor.agent.agent.file.FileReactAgent;
 import cn.hollis.llm.mentor.agent.agent.pptx.PPTBuilderAgent;
 import cn.hollis.llm.mentor.agent.agent.websearch.WebSearchReactAgent;
-import cn.hollis.llm.mentor.agent.sensitive.DfaSensitiveWordService;
+import cn.hollis.llm.mentor.agent.sensitive.SensitiveWordFilterService;
 import cn.hollis.llm.mentor.agent.sensitive.SensitiveWordFilterResult;
 import cn.hollis.llm.mentor.agent.service.AgentTaskManager;
 import cn.hollis.llm.mentor.agent.service.AiSessionService;
@@ -54,7 +54,7 @@ public class AgentController implements InitializingBean {
     private MetasoSearchService metasoSearchService;
 
     @Autowired
-    private DfaSensitiveWordService sensitiveWordService;
+    private SensitiveWordFilterService sensitiveWordService;
 
     /**
      * 网页搜索工具回调
@@ -272,14 +272,16 @@ public class AgentController implements InitializingBean {
     }
 
     /**
-     * 用户输入进入大模型前统一进行敏感词过滤
+     * 用户输入进入大模型前先检测敏感词
+     * 命中则拒绝请求，让用户重新提问，过滤后文本记入日志便于排查
      */
     private String filterQuery(String query, String conversationId, String scene) {
         SensitiveWordFilterResult filterResult = sensitiveWordService.filter(query);
         if (filterResult.hit()) {
-            log.warn("检测到敏感词, scene={}, conversationId={}, hitWords={}, filteredQuery={}",
+            log.warn("检测到敏感词已拒绝, scene={}, conversationId={}, hitWords={}, filteredText={}",
                     scene, conversationId, filterResult.hitWords(), filterResult.filteredText());
+            throw new IllegalArgumentException("输入包含敏感词，请重新提问");
         }
-        return filterResult.filteredText();
+        return query;
     }
 }

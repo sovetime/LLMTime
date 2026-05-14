@@ -18,7 +18,9 @@
       "Bash(javap -c -p dev/langchain4j/rag/content/aggregator/ReRankingContentAggregator.class)",
       "Bash(javap -c -p 'dev/langchain4j/rag/content/aggregator/ReRankingContentAggregator$ReRankingContentAggregatorBuilder.class')",
       "Bash(javap -c -p dev/langchain4j/model/scoring/ScoringModel.class)",
-      "Bash(python -c ' *)"
+      "Bash(python -c ' *)",
+      "Bash(mvn compile *)",
+      "Bash(graphify update *)"
     ]
   }
 }
