@@ -213,15 +213,14 @@ public class RagModuleController {
 
     @GetMapping("testPromptRouter")
     public String testPromptRouter(String query) {
-        IntentRecognitionResult intentRecognitionResult = AiServices.builder(IntentRecognitionService.class).chatModel(chatModel).build().chat(query);
+        IntentRecognitionResult intentRecognitionResult = AiServices.builder(IntentRecognitionService.class).chatModel(chatModel).build().chat(UUID.randomUUID().toString(), query);
         return promptService.getPrompt(intentRecognitionResult);
     }
 
     @GetMapping("testPromptRouter1")
     public String testPromptRouter1(String query) {
 
-
-        IntentRecognitionResult intentRecognitionResult = AiServices.builder(IntentRecognitionService.class).chatModel(chatModel).build().chat(query);
+        IntentRecognitionResult intentRecognitionResult = AiServices.builder(IntentRecognitionService.class).chatModel(chatModel).build().chat(UUID.randomUUID().toString(), query);
         String prompt = promptService.getPrompt(intentRecognitionResult);
         //根据意图对应的提示词模板，构建内容注入器（将检索结果注入到提示词中）
         ContentInjector contentInjector = new DefaultContentInjector(PromptTemplate.from(prompt));

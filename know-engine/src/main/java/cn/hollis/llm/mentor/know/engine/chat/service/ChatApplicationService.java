@@ -1,15 +1,20 @@
 package cn.hollis.llm.mentor.know.engine.chat.service;
 
+import cn.hollis.llm.mentor.know.engine.ai.constant.KnowEngineIntent;
 import cn.hollis.llm.mentor.know.engine.ai.service.KnowEngineChatAiService;
 import cn.hollis.llm.mentor.know.engine.ai.service.PromptService;
+import cn.hollis.llm.mentor.know.engine.business.converter.CarInfoConverter;
+import cn.hollis.llm.mentor.know.engine.business.converter.MyCarConverter;
+import cn.hollis.llm.mentor.know.engine.business.entity.CarInfo;
+import cn.hollis.llm.mentor.know.engine.business.entity.MyCar;
+import cn.hollis.llm.mentor.know.engine.business.service.CarInfoService;
+import cn.hollis.llm.mentor.know.engine.business.service.MyCarService;
 import cn.hollis.llm.mentor.know.engine.chat.entity.ChatParam;
+import cn.hollis.llm.mentor.know.engine.chat.memory.DatabaseChatMemoryStore;
 import cn.hollis.llm.mentor.know.engine.document.service.KnowledgeSegmentService;
-import cn.hollis.llm.mentor.know.engine.rag.modules.KnowEngineElasticsearchContentRetriever;
-import cn.hollis.llm.mentor.know.engine.rag.modules.KnowEngineQueryRouter;
-import cn.hollis.llm.mentor.know.engine.rag.modules.KnowEngineQueryTransformer;
-import cn.hollis.llm.mentor.know.engine.rag.modules.ProgressAwareContentAggregator;
+import cn.hollis.llm.mentor.know.engine.rag.modules.*;
 import cn.hollis.llm.mentor.know.engine.rag.modules.reranker.BgeScoringModel;
-import cn.hollis.llm.mentor.know.engine.rag.modules.splitter.ProgressAwareContentRetriever;
+import com.alibaba.fastjson2.JSON;
 import dev.langchain4j.community.rag.content.retriever.neo4j.Neo4jGraph;
 import dev.langchain4j.community.rag.content.retriever.neo4j.Neo4jText2CypherRetriever;
 import dev.langchain4j.experimental.rag.content.retriever.sql.SqlDatabaseContentRetriever;
@@ -33,6 +38,7 @@ import org.elasticsearch.client.RestClient;
 import org.neo4j.driver.Driver;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.util.CollectionUtils;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.scheduler.Schedulers;
@@ -74,15 +80,54 @@ public class ChatApplicationService {
     @Autowired
     private ChatMessageService chatMessageService;
 
+    @Autowired
+    private MyCarService myCarService;
+
+    @Autowired
+    private CarInfoService carInfoService;
+
+    @Autowired
+    private DatabaseChatMemoryStore databaseChatMemoryStore;
+
     /**
-     * 流式对话（无进度回调）
+     * 流式对话
+     * <p>
+     * 1. 根据意图识别结果，判断是否需要车辆信息
+     * 2. 如果车辆信息不完善，则返回车辆信息不完善提示
+     * 3. 根据意图识别结果，判断是否需要车辆信息
+     * </p>
      */
     public Flux<String> chat(ChatParam chatParam) {
-        return chat(chatParam, null);
+        KnowEngineIntent intent = KnowEngineIntent.getIntent(chatParam.intentRecognitionResult());
+
+        // 如果是维保服务、技术支持，则需要车辆信息
+        if (intent == KnowEngineIntent.CAR_MAINTENANCE
+                || intent == KnowEngineIntent.CAR_TECH_SUPPORT) {
+            if (chatParam.intentRecognitionResult().entities().car_id() == null) {
+                List<MyCar> myCars = myCarService.getCarByUserId(chatParam.userId());
+                if (CollectionUtils.isEmpty(myCars)) {
+                    return Flux.just("[WARN]:您还没有添加车辆信息，请先添加车辆信息");
+                } else if (myCars.size() >= 1) {
+                    return Flux.just("[CARD]:请先选择车辆")
+                            .concatWith(Flux.just("[CARD_CHOICE_MYCAR]:" + JSON.toJSONString(MyCarConverter.INSTANCE.toVOList(myCars))));
+                }
+            }
+        }
+
+        // 如果是营销政策，则需要车辆信息
+        if (intent == KnowEngineIntent.CAR_MARKETING) {
+            if (chatParam.intentRecognitionResult().entities().car_model() == null) {
+                List<CarInfo> carInfoList = carInfoService.getCarInfoByBrand(null);
+                return Flux.just("[CARD]:请先选择您要咨询的车辆")
+                        .concatWith(Flux.just("[CARD_CHOICE_CAR]:" + JSON.toJSONString(CarInfoConverter.INSTANCE.toVOList(carInfoList))));
+            }
+        }
+
+        return doChat(chatParam);
     }
 
     /**
-     * 流式对话（带进度回调）
+     * 流式对话
      * <p>
      * 使用 Flux.create() 将 RAG 管道各环节的进度消息与 LLM 流式输出桥接到同一个 Flux 中，
      * 确保进度消息在对应的 LLM token 之前到达前端。
@@ -95,96 +140,81 @@ public class ChatApplicationService {
      *   <li>生成回答 — 由 {@link ProgressAwareContentAggregator} 在聚合完成后发送</li>
      * </ol>
      *
-     * @param chatParam        对话参数
-     * @param progressCallback 进度回调，可为 null
+     * @param chatParam 对话参数
      */
-    public Flux<String> chat(ChatParam chatParam, Consumer<String> progressCallback) {
+    public Flux<String> doChat(ChatParam chatParam) {
 
         return Flux.<String>create(sink -> {
                     // 进度回调：同时写入 sink 和外部回调
-                    Consumer<String> callback = msg -> {
-                        sink.next(msg);
-                        if (progressCallback != null) {
-                            progressCallback.accept(msg);
-                        }
-                    };
+                    Consumer<String> processCallback = sink::next;
 
-                    // 预存一条空助手消息，后续流式输出完成时回填完整内容
-                    String assistantMessageId = chatMessageService.saveAssistantMessage(chatParam.conversationId());
+                    // 构建查询改写器（带进度回调）
+                    KnowEngineQueryTransformer queryTransformer = new KnowEngineQueryTransformer(chatModel, chatParam.messageId(), processCallback);
 
-                    // 查询改写器：基于历史消息改写用户问题，消除指代歧义（带进度回调）
-                    KnowEngineQueryTransformer queryTransformer = new KnowEngineQueryTransformer(chatModel, chatParam.messageId(), callback);
-
-                    // 向量检索配置：用 embedding 语义相似度匹配知识库片段
-                    ProgressAwareContentRetriever embeddingRetriever = new ProgressAwareContentRetriever(
-                            KnowEngineElasticsearchContentRetriever.builder()
+                    ProgressAwareContentRetriever embeddingRetriever = new ProgressAwareContentRetriever(KnowEngineElasticsearchContentRetriever.builder()
                             .configuration(ElasticsearchConfigurationKnn.builder().build())
                             .maxResults(5)
-                            .minScore(0.5)  //相似度过滤阈值
+                            .minScore(0.5)
                             .embeddingModel(openAiEmbeddingModel)
                             .restClient(restClient)
                             .indexName(INDEX_NAME)
                             .knowledgeSegmentService(knowledgeSegmentService)
-                            .build(), callback);
+                            .build(), processCallback);
 
-                    // 全文检索配置：用关键词匹配（ES 全文索引）
-                    ProgressAwareContentRetriever fullTextRetriever = new ProgressAwareContentRetriever(
-                            ElasticsearchContentRetriever.builder()
+                    ProgressAwareContentRetriever fullTextRetriever = new ProgressAwareContentRetriever(ElasticsearchContentRetriever.builder()
                             .configuration(ElasticsearchConfigurationFullText.builder().build())
                             .restClient(restClient)
                             .indexName(INDEX_NAME)
                             .maxResults(5)
-                            .build(), callback);
+                            .build(), processCallback);
 
-                    // SQL 检索配置：将自然语言转为 SQL 查询数据库
-                    ProgressAwareContentRetriever sqlRetriever = new ProgressAwareContentRetriever(
-                            SqlDatabaseContentRetriever.builder().dataSource(dataSource)
-                            //todo 从资源文件加载 text-to-sql 提示词和表结构定义
+                    ProgressAwareContentRetriever sqlRetriever = new ProgressAwareContentRetriever(SqlDatabaseContentRetriever.builder().dataSource(dataSource)
+                            //todo
                             .promptTemplate(new PromptTemplate("textToSqlPrompt.getContentAsString(UTF_8)"))
                             .databaseStructure("tablesSql.getContentAsString(UTF_8)")
                             .chatModel(chatModel)
-                            .build(), callback);
+                            .build(), processCallback);
 
-                    // 图数据库检索配置：将自然语言转为 Cypher 查询 Neo4j
-                    ProgressAwareContentRetriever neo4jRetriever = new ProgressAwareContentRetriever(
-                            Neo4jText2CypherRetriever.builder()
+                    ProgressAwareContentRetriever neo4jRetriever = new ProgressAwareContentRetriever(Neo4jText2CypherRetriever.builder()
                             .graph(Neo4jGraph.builder()
                                     .driver(neo4jDriver)
                                     .build())
                             .chatModel(chatModel)
-                            .build(), callback);
+                            .build(), processCallback);
 
-                    // BGE 重排序模型（ONNX 本地运行），对检索结果重新打分排序
                     OnnxScoringModel scoringModel = BgeScoringModel.getInstance();
 
-                    // 内容聚合器：整合多路检索结果 → 重排序 → 取 Top-K，并在聚合完成时发送"正在生成回答"进度
+                    // 使用带进度通知的聚合器包装原始聚合器
                     ContentAggregator contentAggregator = new ProgressAwareContentAggregator(
-                            //
                             ReRankingContentAggregator.builder()
                                     .scoringModel(scoringModel)
                                     .maxResults(5)
                                     .querySelector(queryToContents -> queryToContents.keySet().iterator().next())
                                     .build(),
-                            callback, assistantMessageId, chatMessageService);
+                            processCallback, chatParam.assistantMessageId(), chatMessageService
+                    );
 
-                    //根据意图获取提示词
                     String prompt = promptService.getPrompt(chatParam.intentRecognitionResult());
-                    //构建内容注入器，将检索结果按提示词模板格式注入到用户消息中
-                    ContentInjector contentInjector = new DefaultContentInjector(PromptTemplate.from(prompt));
+
+                    ContentInjector contentInjector = new DefaultContentInjector();
 
                     // 构建查询路由器（带进度回调）
                     RetrievalAugmentor retrievalAugmentor = DefaultRetrievalAugmentor.builder()
-                            .queryRouter(new KnowEngineQueryRouter(List.of(embeddingRetriever, fullTextRetriever, sqlRetriever, neo4jRetriever), chatModel, callback))
+                            .queryRouter(new KnowEngineQueryRouter(List.of(embeddingRetriever, fullTextRetriever, sqlRetriever, neo4jRetriever), chatModel, processCallback))
                             .queryTransformer(queryTransformer)
                             .contentAggregator(contentAggregator)
                             .contentInjector(contentInjector)
                             .build();
 
-                    //构建 AI Service：将 ChatModel、ChatMemory、RAG 管道装配为声明式 AI 服务接口
                     KnowEngineChatAiService knowEngineChatAiService = AiServices.builder(KnowEngineChatAiService.class)
                             .chatModel(chatModel)
                             .streamingChatModel(streamingChatModel)
-                            .chatMemoryProvider(memoryId -> MessageWindowChatMemory.builder().maxMessages(10).build())
+                            .chatMemoryProvider(memoryId -> MessageWindowChatMemory.builder()
+                                    .id(memoryId)
+                                    .maxMessages(10)
+                                    .chatMemoryStore(databaseChatMemoryStore)
+                                    .build())
+                            .systemMessage(prompt)
                             .retrievalAugmentor(retrievalAugmentor)
                             .build();
 
@@ -200,7 +230,7 @@ public class ChatApplicationService {
                                 }
                                 contentBuilder.append(token);
                             })
-                            .doOnComplete(() -> chatMessageService.updateContent(assistantMessageId, contentBuilder.toString()))
+                            .doOnComplete(() -> chatMessageService.updateContent(chatParam.assistantMessageId(), contentBuilder.toString()))
                             .subscribe(sink::next, sink::error, sink::complete);
 
                     // 取消时同步取消内部订阅

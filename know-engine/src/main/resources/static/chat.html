@@ -400,6 +400,94 @@
         ::-webkit-scrollbar-thumb:hover {
             background: #aaa;
         }
+        /* 警告消息 */
+        .warn-message {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 14px;
+            background: #fff8e1;
+            border: 1px solid #ffe082;
+            border-radius: 8px;
+            color: #f57f17;
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+        .warn-message .warn-icon {
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+        /* 卡片提示文字 */
+        .card-prompt {
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+        /* 车辆卡片选择区域 */
+        .card-choice-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+        .car-card {
+            display: flex;
+            flex-direction: column;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 12px;
+            cursor: pointer;
+            transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+            background: #fafafa;
+        }
+        .car-card:hover {
+            border-color: #667eea;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+            transform: translateY(-2px);
+        }
+        .car-card-image {
+            width: 100%;
+            height: 100px;
+            object-fit: cover;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            background: #eee;
+        }
+        .car-card-image-placeholder {
+            width: 100%;
+            height: 100px;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, #e0e8ff 0%, #f0e6ff 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+        }
+        .car-card-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 4px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .car-card-detail {
+            font-size: 12px;
+            color: #888;
+            line-height: 1.5;
+        }
+        .car-card-detail span {
+            display: block;
+        }
+        .car-card-price {
+            font-size: 14px;
+            font-weight: 600;
+            color: #e53935;
+            margin-top: 4px;
+        }
         /* 响应式 */
         @media (max-width: 768px) {
             .chat-container {
@@ -612,7 +700,7 @@
         }
 
         // 发送消息
-        async function sendMessage() {
+        async function sendMessage(extraParams) {
             const content = messageInput.value.trim();
             if (!content || isStreaming) return;
 
@@ -639,6 +727,12 @@
                 if (currentConversationId) {
                     params.append('conversationId', currentConversationId);
                 }
+                // 追加卡片选择传入的额外参数（myCarId / carId / orderId）
+                if (extraParams) {
+                    for (const [key, value] of Object.entries(extraParams)) {
+                        if (value) params.append(key, value);
+                    }
+                }
 
                 // 使用fetch发送请求
                 const response = await fetch(`/chat/send?${params.toString()}`, {
@@ -654,6 +748,7 @@
                 const decoder = new TextDecoder();
                 let buffer = '';
                 let fullContent = '';
+                let hasSpecialContent = false; // 标记是否已渲染 WARN/CARD 等特殊内容
 
                 while (true) {
                     const { done, value } = await reader.read();
@@ -697,6 +792,44 @@
                                 }
                                 continue;
                             }
+                            // 检查是否是警告消息
+                            if (data.startsWith('[WARN]:')) {
+                                const warnMsg = data.substring(7).trim();
+                                renderWarnMessage(aiMessageElement, warnMsg);
+                                hasSpecialContent = true;
+                                continue;
+                            }
+                            // 检查是否是卡片提示
+                            if (data.startsWith('[CARD]:')) {
+                                const cardPrompt = data.substring(7).trim();
+                                renderCardPrompt(aiMessageElement, cardPrompt);
+                                hasSpecialContent = true;
+                                continue;
+                            }
+                            // 检查是否是我的车辆选择卡片
+                            if (data.startsWith('[CARD_CHOICE_MYCAR]:')) {
+                                const json = data.substring(20).trim();
+                                try {
+                                    const cars = JSON.parse(json);
+                                    renderMyCarChoices(aiMessageElement, cars);
+                                    hasSpecialContent = true;
+                                } catch (e) {
+                                    console.error('解析我的车辆数据失败:', e);
+                                }
+                                continue;
+                            }
+                            // 检查是否是车型选择卡片
+                            if (data.startsWith('[CARD_CHOICE_CAR]:')) {
+                                const json = data.substring(18).trim();
+                                try {
+                                    const cars = JSON.parse(json);
+                                    renderCarInfoChoices(aiMessageElement, cars);
+                                    hasSpecialContent = true;
+                                } catch (e) {
+                                    console.error('解析车型数据失败:', e);
+                                }
+                                continue;
+                            }
                             // 累积内容（收到实际内容后，将最后一个进度标记为已完成）
                             if (fullContent === '') {
                                 markAllProgressDone(aiMessageElement);
@@ -718,8 +851,8 @@
                     }
                 }
 
-                // 如果没有收到流式内容，显示提示
-                if (!fullContent) {
+                // 如果没有收到流式内容，也没有渲染过特殊内容（WARN/CARD），显示提示
+                if (!fullContent && !hasSpecialContent) {
                     updateMessageContent(aiMessageElement, '对话已创建，请继续输入您的问题。');
                 }
 
@@ -883,6 +1016,101 @@
             if (progressEl) {
                 progressEl.remove();
             }
+        }
+
+        // 渲染警告消息
+        function renderWarnMessage(messageElement, warnText) {
+            removeTypingIndicator(messageElement);
+            const contentEl = messageElement.querySelector('.message-content');
+            if (!contentEl) return;
+            const textEl = contentEl.querySelector('.message-text');
+            if (textEl) {
+                textEl.innerHTML = `<div class="warn-message"><span class="warn-icon">⚠️</span><span>${escapeHtml(warnText)}</span></div>`;
+            }
+            scrollToBottom();
+        }
+
+        // 渲染卡片提示文字
+        function renderCardPrompt(messageElement, promptText) {
+            removeTypingIndicator(messageElement);
+            const contentEl = messageElement.querySelector('.message-content');
+            if (!contentEl) return;
+            const textEl = contentEl.querySelector('.message-text');
+            if (textEl) {
+                textEl.innerHTML = `<div class="card-prompt">${escapeHtml(promptText)}</div>`;
+            }
+            scrollToBottom();
+        }
+
+        // 渲染我的车辆选择卡片 (MyCarVO: carId, fullName, nickname, plateNumber, color, imageUrl)
+        function renderMyCarChoices(messageElement, cars) {
+            const contentEl = messageElement.querySelector('.message-content');
+            if (!contentEl) return;
+            const textEl = contentEl.querySelector('.message-text');
+            if (!textEl) return;
+
+            const gridHtml = `<div class="card-choice-grid">${cars.map(car => `
+                <div class="car-card" onclick="handleMyCarSelect('${escapeAttr(car.carId)}','${escapeAttr(car.carInfoId)}', '${escapeAttr(car.fullName || car.nickname || '')}', '${escapeAttr(car.plateNumber || '')}')">
+                    ${car.imageUrl
+                        ? `<img class="car-card-image" src="${escapeAttr(car.imageUrl)}" alt="${escapeHtml(car.fullName || '')}" onerror="this.outerHTML='<div class=\\'car-card-image-placeholder\\'>🚗</div>'">`
+                        : '<div class="car-card-image-placeholder">🚗</div>'}
+                    <div class="car-card-name">${escapeHtml(car.fullName || car.nickname || '未知车辆')}</div>
+                    <div class="car-card-detail">
+                        ${car.plateNumber ? `<span>车牌：${escapeHtml(car.plateNumber)}</span>` : ''}
+                        ${car.color ? `<span>颜色：${escapeHtml(car.color)}</span>` : ''}
+                    </div>
+                </div>
+            `).join('')}</div>`;
+
+            // 追加到已有的 card-prompt 后面
+            textEl.insertAdjacentHTML('beforeend', gridHtml);
+            scrollToBottom();
+        }
+
+        // 渲染车型选择卡片 (CarInfoVO: infoId, fullName, brand, modelName, vehicleType, guidePrice, imageUrl)
+        function renderCarInfoChoices(messageElement, cars) {
+            const contentEl = messageElement.querySelector('.message-content');
+            if (!contentEl) return;
+            const textEl = contentEl.querySelector('.message-text');
+            if (!textEl) return;
+
+            const gridHtml = `<div class="card-choice-grid">${cars.map(car => `
+                <div class="car-card" onclick="handleCarInfoSelect('${escapeAttr(car.infoId)}', '${escapeAttr(car.fullName || car.modelName || '')}')">
+                    ${car.imageUrl
+                        ? `<img class="car-card-image" src="${escapeAttr(car.imageUrl)}" alt="${escapeHtml(car.fullName || '')}" onerror="this.outerHTML='<div class=\\'car-card-image-placeholder\\'>🚘</div>'">`
+                        : '<div class="car-card-image-placeholder">🚘</div>'}
+                    <div class="car-card-name">${escapeHtml(car.fullName || car.modelName || '未知车型')}</div>
+                    <div class="car-card-detail">
+                        ${car.vehicleType ? `<span>类型：${escapeHtml(car.vehicleType)}</span>` : ''}
+                        ${car.fuelType ? `<span>燃料：${escapeHtml(car.fuelType)}</span>` : ''}
+                    </div>
+                    ${car.guidePrice ? `<div class="car-card-price">¥${Number(car.guidePrice).toLocaleString()}万</div>` : ''}
+                </div>
+            `).join('')}</div>`;
+
+            textEl.insertAdjacentHTML('beforeend', gridHtml);
+            scrollToBottom();
+        }
+
+        // 处理用户选择自己的车辆
+        function handleMyCarSelect(carId, infoId, carName, plateNumber) {
+            if (isStreaming) return;
+            const desc = plateNumber ? `${carName}（${plateNumber}）` : carName;
+            messageInput.value = `我的车辆是：${desc}`;
+            sendMessage({ myCarId: carId, carId: infoId});
+        }
+
+        // 处理用户选择咨询的车型
+        function handleCarInfoSelect(infoId, carName) {
+            if (isStreaming) return;
+            messageInput.value = `我想咨询的车辆是：${carName}`;
+            sendMessage({ carId: infoId });
+        }
+
+        // HTML 属性转义（用于 onclick 等属性中的字符串值）
+        function escapeAttr(text) {
+            if (!text) return '';
+            return String(text).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
         }
 
         // 重置聊天区域

@@ -1,7 +1,9 @@
 package cn.hollis.llm.mentor.know.engine.rag.modules;
 
+import cn.hollis.llm.mentor.know.engine.chat.constant.RetrievalSource;
 import cn.hollis.llm.mentor.know.engine.chat.entity.ChatMessage;
 import cn.hollis.llm.mentor.know.engine.chat.service.ChatMessageService;
+import cn.hollis.llm.mentor.know.engine.rag.util.ReferenceUtil;
 import com.alibaba.fastjson2.JSON;
 import dev.langchain4j.rag.content.Content;
 import dev.langchain4j.rag.content.aggregator.ContentAggregator;
@@ -15,8 +17,7 @@ import java.util.Map;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
-import static cn.hollis.llm.mentor.know.engine.rag.constant.MetadataKeyConstant.*;
-import static dev.langchain4j.rag.content.ContentMetadata.RERANKED_SCORE;
+import static cn.hollis.llm.mentor.know.engine.rag.constant.MetadataKeyConstant.DOC_ID;
 
 /**
  * 带进度通知的内容聚合器
@@ -64,16 +65,9 @@ public class ProgressAwareContentAggregator implements ContentAggregator {
                             content -> content.textSegment().metadata().getInteger(DOC_ID),
                             content -> content,
                             (existing, replacement) -> existing
-                    )).values().stream().map(content -> {
-                        ChatMessage.RagReference reference = new ChatMessage.RagReference();
-                        reference.setDocumentId(content.textSegment().metadata().getInteger(DOC_ID) + "");
-                        reference.setChunkId(content.textSegment().metadata().getString(CHUNK_ID));
-                        reference.setUrl(content.textSegment().metadata().getString(URL));
-                        reference.setDocumentTitle(content.textSegment().metadata().getString(FILE_NAME));
-                        reference.setChunkContent(content.textSegment().text());
-                        reference.setRerankScore((double) content.metadata().get(RERANKED_SCORE));
-                        return reference;
-                    }).collect(Collectors.toList());
+                    )).values().stream()
+                    .map(content -> ReferenceUtil.getRagReference(content, RetrievalSource.HYBRID))
+                    .collect(Collectors.toList());
 
             if (!CollectionUtils.isEmpty(ragReferences) && chatMessageService != null && chatMessageId != null) {
                 chatMessageService.updateRagReferences(chatMessageId, ragReferences);

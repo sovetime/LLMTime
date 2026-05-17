@@ -8,10 +8,7 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
 import java.util.List;
 import java.util.Map;
@@ -19,7 +16,8 @@ import java.util.Map;
 /**
  * AI对话消息表
  */
-@Data
+@Getter
+@Setter
 @TableName(value = "chat_message", autoResultMap = true)
 public class ChatMessage extends BaseEntity {
 

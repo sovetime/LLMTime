@@ -7,10 +7,12 @@ import cn.hollis.llm.mentor.agent.entity.record.RoundState;
 import cn.hollis.llm.mentor.agent.entity.record.SearchResult;
 import cn.hollis.llm.mentor.agent.prompts.ReactAgentPrompts;
 import cn.hollis.llm.mentor.agent.entity.AiSession;
+import cn.hollis.llm.mentor.agent.entity.AiToolCallLog;
 import cn.hollis.llm.mentor.agent.entity.vo.SaveQuestionRequest;
 import cn.hollis.llm.mentor.agent.entity.vo.UpdateAnswerRequest;
 import cn.hollis.llm.mentor.agent.service.AgentTaskManager;
 import cn.hollis.llm.mentor.agent.service.AiSessionService;
+import cn.hollis.llm.mentor.agent.service.AiToolCallLogService;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import cn.hollis.llm.mentor.agent.utils.SearchResultParser;
@@ -33,6 +35,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Sinks;
 import reactor.core.scheduler.Schedulers;
 
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -52,16 +55,19 @@ public class WebSearchReactAgent extends BaseAgent {
     private int maxRounds;
     private final List<Advisor> advisors;
     private final int maxReflectionRounds;
+    private final AiToolCallLogService toolCallLogService;
 
     public WebSearchReactAgent(String name, ChatModel chatModel, List<ToolCallback> tools, String systemPrompt, int maxRounds,
                                ChatMemory chatMemory, List<Advisor> advisors, int maxReflectionRounds,
-                               AiSessionService sessionService, AgentTaskManager taskManager) {
+                               AiSessionService sessionService, AgentTaskManager taskManager,
+                               AiToolCallLogService toolCallLogService) {
         super(name, chatModel, "websearch");
         this.tools = tools;
         this.systemPrompt = systemPrompt;
         this.maxRounds = maxRounds;
         this.advisors = advisors;
         this.maxReflectionRounds = maxReflectionRounds;
+        this.toolCallLogService = toolCallLogService;
         this.chatMemory = chatMemory;
         this.sessionService = sessionService;
         this.taskManager = taskManager;
@@ -423,7 +429,7 @@ public class WebSearchReactAgent extends BaseAgent {
             return;
         }
 
-        executeToolCalls(sink, state.toolCalls, messages, hasSentFinalResult, state, agentState, () -> {
+        executeToolCalls(sink, state.toolCalls, messages, hasSentFinalResult, state, agentState, conversationId, () -> {
             if (!hasSentFinalResult.get()) {
                 scheduleRound(messages, sink, roundCounter,
                         hasSentFinalResult, finalAnswerBuffer,
@@ -521,7 +527,7 @@ public class WebSearchReactAgent extends BaseAgent {
         }
     }
 
-    private void executeToolCalls(Sinks.Many<String> sink, List<AssistantMessage.ToolCall> toolCalls, List<Message> messages, AtomicBoolean hasSentFinalResult, RoundState state, AgentState agentState, Runnable onComplete) {
+    private void executeToolCalls(Sinks.Many<String> sink, List<AssistantMessage.ToolCall> toolCalls, List<Message> messages, AtomicBoolean hasSentFinalResult, RoundState state, AgentState agentState, String conversationId, Runnable onComplete) {
         AtomicInteger completedCount = new AtomicInteger(0);
         int totalToolCalls = toolCalls.size();
 
@@ -540,6 +546,7 @@ public class WebSearchReactAgent extends BaseAgent {
 
                 ToolCallback callback = findTool(toolName);
                 if (callback == null) {
+                    recordToolCall(conversationId, tc, false, "工具未找到：" + toolName, 0, 0L);
                     // 工具未找到时，也放入 responseMap
                     responseMap.put(tc.id(), new ToolResponseMessage.ToolResponse(
                             tc.id(), toolName, "{ \"error\": \"工具未找到：" + toolName + "\" }"));
@@ -547,15 +554,21 @@ public class WebSearchReactAgent extends BaseAgent {
                     return;
                 }
                 if (toolName.contains("search")) {
-                    JSONObject args = JSON.parseObject(argsJson);
-                    String query = (String) args.get("query");
-                    // 发送 thinking 消息，表示正在搜索相关信息
-                    String queryThink = StringUtils.isNotBlank(query) ? "🔍 正在搜索信息: " + query + "\n" : "🔍 正在搜索相关信息\n";
-                    sink.tryEmitNext(createThinkingResponse(queryThink));
+                    try {
+                        JSONObject args = JSON.parseObject(argsJson);
+                        String query = (String) args.get("query");
+                        // 发送 thinking 消息，表示正在搜索相关信息
+                        String queryThink = StringUtils.isNotBlank(query) ? "🔍 正在搜索信息: " + query + "\n" : "🔍 正在搜索相关信息\n";
+                        sink.tryEmitNext(createThinkingResponse(queryThink));
+                    } catch (Exception e) {
+                        log.warn("解析搜索工具参数失败: toolName={}, args={}", toolName, argsJson, e);
+                    }
                 }
 
+                long startTime = System.currentTimeMillis();
                 try {
                     Object result = callback.call(argsJson);
+                    long durationMs = System.currentTimeMillis() - startTime;
                     String resultStr = result.toString();
 
                     // 记录使用的工具
@@ -569,14 +582,41 @@ public class WebSearchReactAgent extends BaseAgent {
                     // 将结果放入 responseMap，key 为 toolCall.id()
                     responseMap.put(tc.id(), new ToolResponseMessage.ToolResponse(
                             tc.id(), toolName, resultStr));
+                    recordToolCall(conversationId, tc, true, null, resultStr.length(), durationMs);
                 } catch (Exception ex) {
                     // 工具执行失败时，也放入 responseMap
                     responseMap.put(tc.id(), new ToolResponseMessage.ToolResponse(
                             tc.id(), toolName, "{ \"error\": \"工具执行失败：" + ex.getMessage() + "\" }"));
+                    recordToolCall(conversationId, tc, false, ex.getMessage(), 0, System.currentTimeMillis() - startTime);
                 } finally {
                     completeToolCall(completedCount, totalToolCalls, responseMap, toolCalls, messages, onComplete);
                 }
             });
+        }
+    }
+
+    private void recordToolCall(String conversationId, AssistantMessage.ToolCall toolCall, boolean success,
+                                String errorMessage, Integer resultSize, Long durationMs) {
+        if (toolCallLogService == null || toolCall == null) {
+            return;
+        }
+
+        try {
+            AiToolCallLog logRecord = new AiToolCallLog();
+            logRecord.setConversationId(conversationId);
+            logRecord.setSessionRecordId(currentSessionId);
+            logRecord.setAgentType(agentType);
+            logRecord.setToolCallId(toolCall.id());
+            logRecord.setToolName(toolCall.name());
+            logRecord.setArguments(toolCall.arguments());
+            logRecord.setSuccess(success);
+            logRecord.setErrorMessage(errorMessage);
+            logRecord.setResultSize(resultSize);
+            logRecord.setDurationMs(durationMs);
+            logRecord.setCreateTime(LocalDateTime.now());
+            toolCallLogService.save(logRecord);
+        } catch (Exception e) {
+            log.warn("记录工具调用日志失败: toolName={}, success={}", toolCall.name(), success, e);
         }
     }
 
@@ -658,6 +698,7 @@ public class WebSearchReactAgent extends BaseAgent {
         private ChatMemory chatMemory;
         private AiSessionService sessionService;
         private AgentTaskManager taskManager;
+        private AiToolCallLogService toolCallLogService;
 
         public Builder chatMemory(ChatMemory chatMemory) {
             this.chatMemory = chatMemory;
@@ -671,6 +712,11 @@ public class WebSearchReactAgent extends BaseAgent {
 
         public Builder taskManager(AgentTaskManager taskManager) {
             this.taskManager = taskManager;
+            return this;
+        }
+
+        public Builder toolCallLogService(AiToolCallLogService toolCallLogService) {
+            this.toolCallLogService = toolCallLogService;
             return this;
         }
 
@@ -723,7 +769,8 @@ public class WebSearchReactAgent extends BaseAgent {
             if (chatModel == null) {
                 throw new IllegalArgumentException("chatModel 不能为空！");
             }
-            return new WebSearchReactAgent(name, chatModel, tools, systemPrompt, maxRounds, chatMemory, advisors, maxReflectionRounds, sessionService, taskManager);
+            return new WebSearchReactAgent(name, chatModel, tools, systemPrompt, maxRounds, chatMemory, advisors,
+                    maxReflectionRounds, sessionService, taskManager, toolCallLogService);
         }
     }
 }

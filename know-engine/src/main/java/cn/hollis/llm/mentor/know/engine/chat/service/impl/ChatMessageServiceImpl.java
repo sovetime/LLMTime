@@ -93,15 +93,23 @@ public class ChatMessageServiceImpl extends ServiceImpl<ChatMessageMapper, ChatM
 
     @Override
     public List<ChatMessage> getRecentMessages(String conversationId, int limit) {
+        // 查询最新的 limit+2 条，排除最新的2条（当前轮次刚保存的user消息和空assistant消息）
         Page<ChatMessage> page = this.page(
-                new Page<>(1, limit),
+                new Page<>(1, limit + 2),
                 new LambdaQueryWrapper<ChatMessage>()
                         .eq(ChatMessage::getConversationId, conversationId)
                         .orderByDesc(ChatMessage::getCreatedAt)
         );
 
-        // 返回列表需要反转，使其按时间正序排列
         List<ChatMessage> records = page.getRecords();
+        // 去掉最新的2条
+        if (records.size() > 2) {
+            records = records.subList(2, records.size());
+        } else {
+            return new java.util.ArrayList<>();
+        }
+
+        // 返回列表需要反转，使其按时间正序排列
         java.util.Collections.reverse(records);
         return records;
     }

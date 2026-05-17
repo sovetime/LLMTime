@@ -41,8 +41,8 @@ public class PromptService {
             return FileCopyUtils.copyToString(new InputStreamReader(resource.getInputStream(), StandardCharsets.UTF_8));
         } catch (IOException e) {
             // 如果指定意图的文件不存在，返回默认提示词
-            if (intent != KnowEngineIntent.CAR_OTHER_QUERY) {
-                return getPrompt(KnowEngineIntent.CAR_OTHER_QUERY);
+            if (intent != KnowEngineIntent.CAR_OTHER) {
+                return getPrompt(KnowEngineIntent.CAR_OTHER);
             }
             throw new RuntimeException("默认提示词文件缺失", e);
         }

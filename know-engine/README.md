@@ -89,11 +89,11 @@
   │ 文件上传   │    │ 格式转换      │    │ 智能切片               │    │ 向量化嵌入     │    │ ES 索引存储   │
   │          │    │              │    │                      │    │              │    │              │
   │ · PDF    │    │ · MinerU     │    │ DocumentSplitter     │    │ text-         │    │ · KNN 索引   │
-  │ · Word   │───▶│   深度解析   │───▶│   Factory            │───▶│ embedding-   │───▶│ · 全文索引   │
+  │ · Word   │───▶│   深度解析    │───▶│   Factory            │───▶│ embedding-   │───▶│ · 全文索引   │
   │ · Excel  │    │ · Word→MD   │    │                      │    │   v4 (1536d) │    │ · 混合索引   │
   │ · MD/TXT │    │ · Excel直通  │    │ · TITLE  → Parent   │    │              │    │              │
   │ · CSV    │    │ · Tika 类型  │    │ · SMART  → Auto     │    │ 跳过:         │    │              │
-  │ · ZIP    │    │   检测       │    │ · LENGTH → ByWord   │    │ skipEmbedding │    │              │
+  │          │    │   检测       │    │ · LENGTH → ByWord   │    │ skipEmbedding │    │              │
   └──────────┘    └──────┬───────┘    │ · REGEX  → ByRegex  │    │ =1 的父分段   │    │              │
                          │            │ · SEPARATOR         │    └──────────────┘    └──────────────┘
                          │            │ Excel → ExcelSplitter│
@@ -178,7 +178,7 @@
 | 数据源 | 检索方式 | 适用场景 |
 |--------|---------|--------|
 | **Elasticsearch** | KNN 向量检索 + 全文检索 + 混合检索 | 语义相似性匹配、非结构化知识 |
-| **MySQL** | Text2SQL（LLM 生成 SQL + 安全沙箱执行） | 结构化数据查询，如订单、保险、召回信息 |
+| **MySQL** | Text2SQL（LLM 生成 SQL） | 结构化数据查询，如订单、保险、召回信息 |
 | **Neo4j** | Text2Cypher（LLM 生成 Cypher + 降级回退） | 实体关系查询，如车型图谱、零部件供应链、故障影响链 |
 
 ### 3. 意图识别与动态 Prompt
@@ -454,9 +454,5 @@ java -jar target/know-engine-1.0.0-SNAPSHOT.jar
 - **容错优先**：LLM JSON 输出修复管道、缓存空值防击穿、标题生成失败保留临时标题、Text2Cypher 降级回退 ES，处处留有余地
 - **分布式 ID 全链路**：雪花算法生成的 ChunkId 贯穿切片 → 存储 → 检索 → 扩展，全局唯一可追溯；版本链路通过 `parentVersionDocId` 关联，时序可追溯
 - **权限内建**：权限信息从文档写入切片 metadata → ES 索引 → 检索 Filter，全链路内建，变更实时生效
-- **安全沙箱**：Text2SQL 生成的 SQL 在只读、LIMIT 限制、敏感字段脱敏的安全沙箱内执行，防止数据泄露；版本链路通过 `parentVersionDocId` 关联，时序可追溯
-- **权限内建**：权限信息从文档写入切片 metadata → ES 索引 → 检索 Filter，全链路内建，变更实时生效
-- **安全沙箱**：Text2SQL 生成的 SQL 在只读、LIMIT 限制、敏感字段脱敏的安全沙箱内执行，防止数据泄露
-
 ---
 

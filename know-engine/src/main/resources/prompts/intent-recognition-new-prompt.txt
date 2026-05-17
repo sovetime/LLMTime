@@ -68,6 +68,7 @@
   "intent": "7大核心意图之一",
   "entities": {
     "car_model": "...",
+    "car_id": "...",
     "order_id": "...",
     "dealer": "...",
     "fault_description": "...",
@@ -89,6 +90,7 @@ Output:
 "intent": "车辆使用与技术指导",
 "entities": {
     "car_model": null,
+    "car_id": null,
     "order_id": null,
     "dealer": null,
     "fault_description": null,
@@ -108,7 +110,30 @@ Output:
 "intent": "投诉与维权",
 "entities": {
     "car_model": null,
+    "car_id": null,
     "order_id": "XYZ12345",
+    "dealer": null,
+    "fault_description": "中控屏老是死机",
+    "appointment_time": null,
+    "part_name": null,
+    "function_name": "中控屏"
+    }
+}
+```
+
+
+
+User Input: "我刚提的新车，才开了一周，今天发现中控屏老是死机，太影响心情了！汽车编号CAR00112312。"
+Output:
+```json
+{
+"reasoning": "1.相关性：涉及中控屏，相关。2.场景：新车/维权阶段。3.辨析：用户表达‘太影响心情’，有强烈负面情绪，属于质量投诉。-> 投诉与维权",
+"related": true,
+"intent": "投诉与维权",
+"entities": {
+    "car_model": null,
+    "car_id": "CAR00112312",
+    "order_id": null,
     "dealer": null,
     "fault_description": "中控屏老是死机",
     "appointment_time": null,
@@ -127,6 +152,7 @@ Output:
 "intent": "售后维修与保养",
 "entities": {
     "car_model": null,
+    "car_id": null,
     "order_id": null,
     "dealer": null,
     "fault_description": "雨刮器刮不干净",
@@ -147,6 +173,7 @@ Output:
 "intent": "闲聊与通用问答",
 "entities": {
     "car_model": null,
+    "car_id": null,
     "order_id": null,
     "dealer": null,
     "fault_description": null,

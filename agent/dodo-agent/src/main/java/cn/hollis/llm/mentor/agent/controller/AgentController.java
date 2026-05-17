@@ -8,8 +8,10 @@ import cn.hollis.llm.mentor.agent.sensitive.SensitiveWordFilterService;
 import cn.hollis.llm.mentor.agent.sensitive.SensitiveWordFilterResult;
 import cn.hollis.llm.mentor.agent.service.AgentTaskManager;
 import cn.hollis.llm.mentor.agent.service.AiSessionService;
+import cn.hollis.llm.mentor.agent.service.AiToolCallLogService;
 import cn.hollis.llm.mentor.agent.tool.FileContentService;
 import cn.hollis.llm.mentor.agent.tool.MetasoSearchService;
+import cn.hollis.llm.mentor.agent.entity.vo.ToolCallStatsVO;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.memory.ChatMemory;
@@ -55,6 +57,9 @@ public class AgentController implements InitializingBean {
 
     @Autowired
     private SensitiveWordFilterService sensitiveWordService;
+
+    @Autowired
+    private AiToolCallLogService toolCallLogService;
 
     /**
      * 网页搜索工具回调
@@ -187,6 +192,12 @@ public class AgentController implements InitializingBean {
         return result;
     }
 
+    @GetMapping("/tool/stats")
+    @Operation(summary = "工具调用统计", description = "统计工具调用总数、成功数、失败数和成功率")
+    public ToolCallStatsVO toolCallStats(@RequestParam(required = false) String toolName) {
+        return toolCallLogService.getStats(toolName);
+    }
+
     @Override
     public void afterPropertiesSet() throws Exception {
         log.info("开始初始化工具toolcallback");
@@ -219,6 +230,7 @@ public class AgentController implements InitializingBean {
                 .tools(webSearchToolCallbacks)
                 .sessionService(sessionService)
                 .taskManager(taskManager)
+                .toolCallLogService(toolCallLogService)
                 .maxRounds(5)
                 .build();
     }
