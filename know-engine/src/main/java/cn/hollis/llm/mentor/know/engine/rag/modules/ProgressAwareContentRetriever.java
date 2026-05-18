@@ -43,6 +43,12 @@ public class ProgressAwareContentRetriever implements ContentRetriever {
         if (progressCallback != null) {
 
             switch (delegate) {
+                case KnowEngineSqlDatabaseContentRetriever knowEngineSqlDatabaseContentRetriever -> {
+                    if (sqlProgressSent.compareAndSet(false, true)) {
+                        progressCallback.accept("[PROGRESS]:正在检索数据库内容...");
+                        System.out.println("[PROGRESS]:正在检索数据库内容...");
+                    }
+                }
                 case SqlDatabaseContentRetriever sqlDatabaseContentRetriever -> {
                     if (sqlProgressSent.compareAndSet(false, true)) {
                         progressCallback.accept("[PROGRESS]:正在检索数据库内容...");

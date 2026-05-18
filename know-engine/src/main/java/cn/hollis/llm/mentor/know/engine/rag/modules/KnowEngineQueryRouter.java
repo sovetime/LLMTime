@@ -2,7 +2,6 @@ package cn.hollis.llm.mentor.know.engine.rag.modules;
 
 import cn.hollis.llm.mentor.know.engine.infra.json.JsonUtil;
 import cn.hollis.llm.mentor.know.engine.rag.model.QueryRouteResult;
-import cn.hollis.llm.mentor.know.engine.rag.modules.splitter.ProgressAwareContentRetriever;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONException;
 import dev.langchain4j.community.rag.content.retriever.neo4j.Neo4jText2CypherRetriever;
@@ -142,10 +141,11 @@ public class KnowEngineQueryRouter implements QueryRouter {
                     return contentRetrievers.stream().filter(retriever ->
                     {
                         if (retriever instanceof ProgressAwareContentRetriever) {
-                            return ((ProgressAwareContentRetriever) retriever).getDelegate() instanceof SqlDatabaseContentRetriever;
+                            ContentRetriever delegate = ((ProgressAwareContentRetriever) retriever).getDelegate();
+                            return delegate instanceof SqlDatabaseContentRetriever || delegate instanceof KnowEngineSqlDatabaseContentRetriever;
                         }
 
-                        return retriever instanceof SqlDatabaseContentRetriever;
+                        return retriever instanceof SqlDatabaseContentRetriever || retriever instanceof KnowEngineSqlDatabaseContentRetriever;
 
                     }).collect(Collectors.toList());
                 case "graph_db":

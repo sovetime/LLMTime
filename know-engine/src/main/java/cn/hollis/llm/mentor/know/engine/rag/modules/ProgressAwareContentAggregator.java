@@ -73,7 +73,10 @@ public class ProgressAwareContentAggregator implements ContentAggregator {
                 chatMessageService.updateRagReferences(chatMessageId, ragReferences);
             }
 
-            if (progressCallback != null) {
+            // 过滤掉chunkId为空的引用，一般是非知识库检索得到的结果
+            ragReferences = ragReferences.stream().filter(reference -> reference.getChunkId() != null).collect(Collectors.toList());
+
+            if (progressCallback != null && !CollectionUtils.isEmpty(ragReferences)) {
                 progressCallback.accept("[REFERENCE]:" + JSON.toJSONString(ragReferences));
                 System.out.println("[REFERENCE]:" + JSON.toJSONString(ragReferences));
             }
