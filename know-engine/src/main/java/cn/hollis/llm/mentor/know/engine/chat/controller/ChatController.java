@@ -119,7 +119,9 @@ public class ChatController {
             finalConversationId = conversationId;
         }
 
-        // 2. 保存用户消息
+        // 持久化本次对话的消息记录
+        // 将用户问题写入 DB（type=USER）
+        // 创建 AI 回答占位记录（type=ASSISTANT, content=null），后续流式完成后 updateContent 填充
         String messageId = chatMessageService.saveUserMessage(finalConversationId, content);
         String assistantMessageId = chatMessageService.saveAssistantMessage(finalConversationId);
 

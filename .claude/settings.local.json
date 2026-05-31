@@ -20,7 +20,8 @@
       "Bash(javap -c -p dev/langchain4j/model/scoring/ScoringModel.class)",
       "Bash(python -c ' *)",
       "Bash(mvn compile *)",
-      "Bash(graphify update *)"
+      "Bash(graphify update *)",
+      "PowerShell(Select-String *)"
     ]
   }
 }

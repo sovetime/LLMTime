@@ -162,12 +162,13 @@ public class ChatApplicationService {
     public Flux<String> doChat(ChatParam chatParam) {
 
         return Flux.<String>create(sink -> {
-                    // 进度回调：同时写入 sink 和外部回调
+                    // 进度回调：所有 RAG 环节通过此回调将状态消息推入 sink，进而推送给前端
                     Consumer<String> processCallback = sink::next;
 
-                    // 构建查询改写器（带进度回调）
+                    // 查询改写器：用户原始问题 -> LLM 改写 -> 更适于检索的查询
                     KnowEngineQueryTransformer queryTransformer = new KnowEngineQueryTransformer(chatModel, chatParam.messageId(), processCallback);
 
+                    // 向量检索器配置：基于 Embedding 相似度的语义检索
                     ProgressAwareContentRetriever embeddingRetriever = new ProgressAwareContentRetriever(KnowEngineElasticsearchContentRetriever.builder()
                             .configuration(ElasticsearchConfigurationKnn.builder().build())
                             .maxResults(5)
@@ -178,6 +179,7 @@ public class ChatApplicationService {
                             .knowledgeSegmentService(knowledgeSegmentService)
                             .build(), processCallback);
 
+                    // 全文检索器配置，基于 Elasticsearch 全文匹配的关键词检索
                     ProgressAwareContentRetriever fullTextRetriever = new ProgressAwareContentRetriever(ElasticsearchContentRetriever.builder()
                             .configuration(ElasticsearchConfigurationFullText.builder().build())
                             .restClient(restClient)
@@ -185,9 +187,10 @@ public class ChatApplicationService {
                             .maxResults(5)
                             .build(), processCallback);
 
+                    // SQL 检索器：将自然语言转为 SQL 查询数据库
+                    // 作为最后手段，SQL 查询失败时会降级到 embeddingRetriever
                     ProgressAwareContentRetriever sqlRetriever = null;
                     try {
-                        // 拼接静态表结构 + table_meta 中动态创建的表结构
                         String databaseStructure = buildDatabaseStructure();
                         sqlRetriever = new ProgressAwareContentRetriever(
                                 KnowEngineSqlDatabaseContentRetriever.builder()
@@ -198,9 +201,10 @@ public class ChatApplicationService {
                                         .fallbackRetriever(embeddingRetriever)
                                         .build(), processCallback);
                     } catch (IOException e) {
-                        log.warn("Error creating SQL retriever", e);
+                        log.warn("SQL 检索器构建失败", e);
                     }
 
+                    // 图谱检索器配置：基于 Neo4j 的 Text2Cypher 检索
                     ProgressAwareContentRetriever neo4jRetriever = new ProgressAwareContentRetriever(Neo4jText2CypherRetriever.builder()
                             .graph(Neo4jGraph.builder()
                                     .driver(neo4jDriver)
@@ -208,9 +212,11 @@ public class ChatApplicationService {
                             .chatModel(chatModel)
                             .build(), processCallback);
 
+                    // 评分排序模型：对多个检索器返回的结果做重排序
                     OnnxScoringModel scoringModel = BgeScoringModel.getInstance();
 
-                    // 使用带进度通知的聚合器包装原始聚合器
+                    // 内容聚合器：合并各检索器结果，经重排序后取 Top-N 作为 LLM 上下文
+                    // 同时负责在"正在生成回答"阶段向 sink 推送进度消息
                     ContentAggregator contentAggregator = new ProgressAwareContentAggregator(
                             ReRankingContentAggregator.builder()
                                     .scoringModel(scoringModel)
@@ -220,11 +226,13 @@ public class ChatApplicationService {
                             processCallback, chatParam.assistantMessageId(), chatMessageService
                     );
 
+                    // 从 PromptService 获取最终 system prompt
                     String prompt = promptService.getPrompt(chatParam.intentRecognitionResult());
 
+                    // 内容注入器：将检索到的文档拼接到 prompt 中
                     ContentInjector contentInjector = new DefaultContentInjector();
 
-                    // 构建查询路由器（带进度回调）
+                    // 组装 RAG 增强器：查询路由 -> 改写 -> 聚合 -> 注入
                     RetrievalAugmentor retrievalAugmentor = DefaultRetrievalAugmentor.builder()
                             .queryRouter(new KnowEngineQueryRouter(List.of(embeddingRetriever, fullTextRetriever, sqlRetriever, neo4jRetriever), chatModel, processCallback))
                             .queryTransformer(queryTransformer)
@@ -232,6 +240,7 @@ public class ChatApplicationService {
                             .contentInjector(contentInjector)
                             .build();
 
+                    // 构建 AI Service：绑定 ChatMemory、System Prompt、RAG 增强器
                     KnowEngineChatAiService knowEngineChatAiService = AiServices.builder(KnowEngineChatAiService.class)
                             .chatModel(chatModel)
                             .streamingChatModel(streamingChatModel)
@@ -250,7 +259,7 @@ public class ChatApplicationService {
                     Disposable disposable = knowEngineChatAiService.streamChat(chatParam.conversationId(), chatParam.content())
                             .doOnNext(token -> {
                                 // 首个 token 到达时，如果之前没有发出"正在生成回答"，则补发
-                                // （正常情况下由 ProgressAwareContentAggregator 已发出，此处为兜底）
+                                // 正常情况下由 ProgressAwareContentAggregator 已发出，此处为兜底
                                 if (firstToken.compareAndSet(true, false)) {
                                     // 标记已开始接收 token
                                 }
@@ -259,7 +268,7 @@ public class ChatApplicationService {
                             .doOnComplete(() -> chatMessageService.updateContent(chatParam.assistantMessageId(), contentBuilder.toString()))
                             .subscribe(sink::next, sink::error, sink::complete);
 
-                    // 取消时同步取消内部订阅
+                    // 取消时同步取消内部订阅，避免资源泄漏
                     sink.onCancel(disposable::dispose);
                 })
                 .subscribeOn(Schedulers.boundedElastic())

@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+import static cn.hollis.llm.mentor.know.engine.rag.constant.MetadataKeyConstant.CHUNK_ID;
 import static cn.hollis.llm.mentor.know.engine.rag.constant.MetadataKeyConstant.DOC_ID;
 
 /**
@@ -60,7 +61,8 @@ public class ProgressAwareContentAggregator implements ContentAggregator {
         List<Content> results = delegate.aggregate(queryToContents);
 
         try {
-            List<ChatMessage.RagReference> ragReferences = results.stream()
+            // 文档维度的RAG引用信息，用于前端展示
+            List<ChatMessage.RagReference> ragReferencesDocs = results.stream()
                     .collect(Collectors.toMap(
                             content -> content.textSegment().metadata().getInteger(DOC_ID),
                             content -> content,
@@ -69,16 +71,26 @@ public class ProgressAwareContentAggregator implements ContentAggregator {
                     .map(content -> ReferenceUtil.getRagReference(content, RetrievalSource.HYBRID))
                     .collect(Collectors.toList());
 
-            if (!CollectionUtils.isEmpty(ragReferences) && chatMessageService != null && chatMessageId != null) {
-                chatMessageService.updateRagReferences(chatMessageId, ragReferences);
+            // chunk维度的RAG引用信息，用于数据持久化
+            List<ChatMessage.RagReference> ragReferenceChunks = results.stream()
+                    .collect(Collectors.toMap(
+                            content -> content.textSegment().metadata().getString(CHUNK_ID),
+                            content -> content,
+                            (existing, replacement) -> existing
+                    )).values().stream()
+                    .map(content -> ReferenceUtil.getRagReference(content, RetrievalSource.HYBRID))
+                    .collect(Collectors.toList());
+
+            if (!CollectionUtils.isEmpty(ragReferenceChunks) && chatMessageService != null && chatMessageId != null) {
+                chatMessageService.updateRagReferences(chatMessageId, ragReferenceChunks);
             }
 
             // 过滤掉chunkId为空的引用，一般是非知识库检索得到的结果
-            ragReferences = ragReferences.stream().filter(reference -> reference.getChunkId() != null).collect(Collectors.toList());
+            ragReferencesDocs = ragReferencesDocs.stream().filter(reference -> reference.getChunkId() != null).collect(Collectors.toList());
 
-            if (progressCallback != null && !CollectionUtils.isEmpty(ragReferences)) {
-                progressCallback.accept("[REFERENCE]:" + JSON.toJSONString(ragReferences));
-                System.out.println("[REFERENCE]:" + JSON.toJSONString(ragReferences));
+            if (progressCallback != null && !CollectionUtils.isEmpty(ragReferencesDocs)) {
+                progressCallback.accept("[REFERENCE]:" + JSON.toJSONString(ragReferencesDocs));
+                System.out.println("[REFERENCE]:" + JSON.toJSONString(ragReferencesDocs));
             }
         } catch (Exception e) {
             log.warn("RAG引用信息回写失败: assistantMsgId={}", chatMessageId, e);

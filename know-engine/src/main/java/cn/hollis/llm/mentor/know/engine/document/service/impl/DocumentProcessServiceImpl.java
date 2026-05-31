@@ -107,18 +107,18 @@ public class DocumentProcessServiceImpl implements DocumentProcessService {
             FileProcessService fileProcessService = fileProcessServiceFactory.get(FileTypeUtil.getFileType(fileName, documentUploadParam.file()), document.getKnowledgeBaseType());
             if (fileProcessService != null) {
                 fileProcessService.processDocument(document, documentUploadParam.file().getInputStream());
-            }
-
-            if (document.getKnowledgeBaseType() == KnowledgeBaseType.DOCUMENT_SEARCH) {
-                document.setStatus(DocumentStatus.CONVERTED);
-                document.setConvertedDocUrl(fileUrl);
-                result = knowledgeDocumentService.updateById(document);
-                Assert.isTrue(result, "文件状态更新失败");
-            } else {
-                document.setStatus(DocumentStatus.STORED);
-                document.setConvertedDocUrl(fileUrl);
-                result = knowledgeDocumentService.updateById(document);
-                Assert.isTrue(result, "文件状态更新失败");
+            }else{
+                if (document.getKnowledgeBaseType() == KnowledgeBaseType.DOCUMENT_SEARCH) {
+                    document.setStatus(DocumentStatus.CONVERTED);
+                    document.setConvertedDocUrl(fileUrl);
+                    result = knowledgeDocumentService.updateById(document);
+                    Assert.isTrue(result, "文件状态更新失败");
+                } else {
+                    document.setStatus(DocumentStatus.STORED);
+                    document.setConvertedDocUrl(fileUrl);
+                    result = knowledgeDocumentService.updateById(document);
+                    Assert.isTrue(result, "文件状态更新失败");
+                }
             }
             return document;
         } catch (Exception e) {

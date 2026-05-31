@@ -18,11 +18,9 @@ import java.util.List;
  * 当 SQL 查询结果为空时，自动降级使用知识库检索器（fallbackRetriever）进行检索，
  * 确保用户总能获得有意义的回答。
  * <p>
- * <b>使用场景：</b>
- * <ul>
- *   <li>SQL 数据库中没有匹配数据时，自动切换到向量/全文知识库检索</li>
- *   <li>数据库查询异常时，优雅降级到知识库检索</li>
- * </ul>
+ * 使用场景
+ *  1.SQL 数据库中没有匹配数据时，自动切换到向量/全文知识库检索
+ *  2.数据库查询异常时，优雅降级到知识库检索
  *
  * @see SqlDatabaseContentRetriever
  * @see ContentRetriever

@@ -209,7 +209,7 @@ public class FileManageService {
             // 使用多模态模型识别图片
             ByteArrayResource imageResource = new ByteArrayResource(imageBytes);
             var userMessage = UserMessage.builder()
-                    .text("请描述这张图片的内容，包括场景、对象、布局、颜色、文字信息，直接输出纯文本描述，不要多余说明。")
+                    .text("请描述这张图片的内容，包括场景、对象、布局、颜色、文字信息，直接输出纯文本描述，不要多余说明，不要增加任何特殊符号，特别是换行符")
                     .media(List.of(new Media(MimeTypeUtils.IMAGE_PNG, imageResource)))
                     .build();
             var response = multimodalChatModel.call(new Prompt(List.of(userMessage)));

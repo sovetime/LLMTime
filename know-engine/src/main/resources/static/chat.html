@@ -4,6 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI 对话助手</title>
+    <!-- Markdown 渲染依赖：marked 解析 + DOMPurify 防 XSS + highlight.js 代码高亮 -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/highlight.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -500,6 +505,110 @@
                 max-width: 85%;
             }
         }
+        /* Markdown 渲染样式（仅作用于 AI 消息） */
+        .markdown-body {
+            font-size: 14px;
+            line-height: 1.7;
+            color: #333;
+            word-wrap: break-word;
+        }
+        .markdown-body p {
+            margin: 6px 0;
+        }
+        .markdown-body h1,
+        .markdown-body h2,
+        .markdown-body h3,
+        .markdown-body h4,
+        .markdown-body h5,
+        .markdown-body h6 {
+            margin: 14px 0 8px;
+            font-weight: 600;
+            line-height: 1.3;
+        }
+        .markdown-body h1 { font-size: 20px; }
+        .markdown-body h2 { font-size: 18px; }
+        .markdown-body h3 { font-size: 16px; }
+        .markdown-body h4,
+        .markdown-body h5,
+        .markdown-body h6 { font-size: 14px; }
+        .markdown-body ul,
+        .markdown-body ol {
+            padding-left: 22px;
+            margin: 6px 0;
+        }
+        .markdown-body li {
+            margin: 2px 0;
+        }
+        .markdown-body a {
+            color: #4a6cf7;
+            text-decoration: none;
+            word-break: break-all;
+        }
+        .markdown-body a:hover {
+            text-decoration: underline;
+        }
+        .markdown-body code {
+            background: #f4f4f4;
+            color: #c7254e;
+            padding: 1px 6px;
+            border-radius: 4px;
+            font-family: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+            font-size: 12.5px;
+        }
+        .markdown-body pre {
+            background: #f6f8fa;
+            border: 1px solid #e1e4e8;
+            border-radius: 8px;
+            padding: 12px 14px;
+            margin: 8px 0;
+            overflow-x: auto;
+        }
+        .markdown-body pre code {
+            background: transparent;
+            color: inherit;
+            padding: 0;
+            border-radius: 0;
+            font-size: 12.5px;
+        }
+        .markdown-body blockquote {
+            margin: 8px 0;
+            padding: 6px 12px;
+            border-left: 4px solid #d0d8f0;
+            background: #f7f9ff;
+            color: #555;
+        }
+        .markdown-body table {
+            border-collapse: collapse;
+            margin: 10px 0;
+            display: block;
+            overflow-x: auto;
+            max-width: 100%;
+        }
+        .markdown-body table th,
+        .markdown-body table td {
+            border: 1px solid #e1e4e8;
+            padding: 6px 10px;
+            font-size: 13px;
+        }
+        .markdown-body table th {
+            background: #f6f8fa;
+            font-weight: 600;
+        }
+        .markdown-body hr {
+            border: none;
+            border-top: 1px solid #e0e0e0;
+            margin: 12px 0;
+        }
+        /* 关键：图片自适应容器宽度，避免超出气泡 */
+        .markdown-body img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 8px 0;
+            border-radius: 6px;
+            cursor: zoom-in;
+            background: #f0f0f0;
+        }
     </style>
 </head>
 <body>
@@ -547,6 +656,42 @@
         let currentConversationId = null;
         let isStreaming = false;
         let eventSource = null;
+
+        // 配置 marked：开启 GFM、换行符转 <br>、代码高亮
+        if (window.marked) {
+            marked.setOptions({
+                gfm: true,
+                breaks: true,
+                highlight: function(code, lang) {
+                    if (window.hljs) {
+                        try {
+                            if (lang && hljs.getLanguage(lang)) {
+                                return hljs.highlight(code, { language: lang }).value;
+                            }
+                            return hljs.highlightAuto(code).value;
+                        } catch (e) { /* ignore */ }
+                    }
+                    return code;
+                }
+            });
+        }
+
+        // Markdown 渲染（先经 marked 解析，再用 DOMPurify 清理，防 XSS）
+        function renderMarkdown(text) {
+            if (text == null) return '';
+            const raw = String(text);
+            if (!window.marked) return escapeHtml(raw);
+            try {
+                const html = marked.parse(raw);
+                if (window.DOMPurify) {
+                    return DOMPurify.sanitize(html, { ADD_ATTR: ['target'] });
+                }
+                return html;
+            } catch (e) {
+                console.error('Markdown 渲染失败:', e);
+                return escapeHtml(raw);
+            }
+        }
 
         // DOM 元素
         const userIdInput = document.getElementById('userIdInput');
@@ -684,11 +829,16 @@
                 const refsHtml = msg.ragReferences && msg.ragReferences.length > 0
                     ? buildReferencesHtml(msg.ragReferences)
                     : '';
+                const isUser = msg.type === 'USER';
+                // AI 消息按 Markdown 渲染（支持图片等），用户消息保持原文转义
+                const bodyHtml = isUser
+                    ? escapeHtml(msg.content || '')
+                    : `<div class="markdown-body">${renderMarkdown(msg.content || '')}</div>`;
                 return `
-                    <div class="message ${msg.type === 'USER' ? 'user' : 'assistant'}">
-                        <div class="message-avatar">${msg.type === 'USER' ? '👤' : '🤖'}</div>
+                    <div class="message ${isUser ? 'user' : 'assistant'}">
+                        <div class="message-avatar">${isUser ? '👤' : '🤖'}</div>
                         <div class="message-content">
-                            <div>${escapeHtml(msg.content)}</div>
+                            <div class="message-text">${bodyHtml}</div>
                             ${refsHtml}
                             <div class="message-time">${formatTime(msg.createTime)}</div>
                         </div>
@@ -750,105 +900,132 @@
                 let fullContent = '';
                 let hasSpecialContent = false; // 标记是否已渲染 WARN/CARD 等特殊内容
 
+                // 处理单个 SSE 事件（事件内可能包含多条 data: 行，需用 \n 拼接以保留 Markdown 换行）
+                const processEvent = (eventBlock) => {
+                    if (!eventBlock) return;
+                    const lines = eventBlock.split(/\r?\n/);
+                    const dataLines = [];
+                    let nonDataFallback = '';
+                    for (const ln of lines) {
+                        if (ln.startsWith('data:')) {
+                            // SSE 规范：data: 后允许有一个可选空格，但不应 trim 内容（保留缩进/列表前缀）
+                            let v = ln.substring(5);
+                            if (v.startsWith(' ')) v = v.substring(1);
+                            dataLines.push(v);
+                        } else if (ln.trim() && !ln.startsWith(':')) {
+                            // 兼容直接返回的非 SSE 文本（如裸 [DONE]:conversationId）
+                            nonDataFallback = ln.trim();
+                        }
+                    }
+
+                    if (dataLines.length === 0) {
+                        // 处理非 SSE 兜底：识别 [DONE]:conversationId
+                        if (nonDataFallback.startsWith('[DONE]:')) {
+                            const conversationId = nonDataFallback.substring(7).trim();
+                            if (conversationId) {
+                                currentConversationId = conversationId;
+                                conversationIdDisplay.textContent = conversationId.substring(0, 8) + '...';
+                                loadConversations();
+                            }
+                        }
+                        return;
+                    }
+
+                    // 关键：多条 data: 行用 \n 拼接，保留 Markdown 中的换行
+                    const data = dataLines.join('\n');
+
+                    // [DONE]:conversationId
+                    if (data.startsWith('[DONE]:')) {
+                        const conversationId = data.substring(7).trim();
+                        if (conversationId) {
+                            currentConversationId = conversationId;
+                            conversationIdDisplay.textContent = conversationId.substring(0, 8) + '...';
+                            loadConversations();
+                        }
+                        return;
+                    }
+                    if (data === '[DONE]') return;
+                    // 进度通知
+                    if (data.startsWith('[PROGRESS]:')) {
+                        updateProgressStatus(aiMessageElement, data.substring(11).trim());
+                        return;
+                    }
+                    // 引用资料
+                    if (data.startsWith('[REFERENCE]:')) {
+                        try {
+                            const refs = JSON.parse(data.substring(12).trim());
+                            aiMessageElement.references = refs;
+                            renderReferences(aiMessageElement, refs);
+                        } catch (e) {
+                            console.error('解析引用数据失败:', e);
+                        }
+                        return;
+                    }
+                    // 警告
+                    if (data.startsWith('[WARN]:')) {
+                        renderWarnMessage(aiMessageElement, data.substring(7).trim());
+                        hasSpecialContent = true;
+                        return;
+                    }
+                    // 卡片提示
+                    if (data.startsWith('[CARD]:')) {
+                        renderCardPrompt(aiMessageElement, data.substring(7).trim());
+                        hasSpecialContent = true;
+                        return;
+                    }
+                    // 我的车辆选择
+                    if (data.startsWith('[CARD_CHOICE_MYCAR]:')) {
+                        try {
+                            const cars = JSON.parse(data.substring(20).trim());
+                            renderMyCarChoices(aiMessageElement, cars);
+                            hasSpecialContent = true;
+                        } catch (e) {
+                            console.error('解析我的车辆数据失败:', e);
+                        }
+                        return;
+                    }
+                    // 车型选择
+                    if (data.startsWith('[CARD_CHOICE_CAR]:')) {
+                        try {
+                            const cars = JSON.parse(data.substring(18).trim());
+                            renderCarInfoChoices(aiMessageElement, cars);
+                            hasSpecialContent = true;
+                        } catch (e) {
+                            console.error('解析车型数据失败:', e);
+                        }
+                        return;
+                    }
+
+                    // 普通内容：累积并渲染（收到首个内容时把最后一个进度标记为完成）
+                    if (fullContent === '') {
+                        markAllProgressDone(aiMessageElement);
+                    }
+                    fullContent += data;
+                    updateMessageContent(aiMessageElement, fullContent);
+                };
+
                 while (true) {
                     const { done, value } = await reader.read();
                     if (done) break;
 
                     buffer += decoder.decode(value, { stream: true });
-                    const lines = buffer.split('\n');
-                    buffer = lines.pop() || '';
 
-                    for (const line of lines) {
-                        if (line.startsWith('data:')) {
-                            const data = line.substring(5).trim();
-                            // 检查是否是 [DONE]:conversationId 格式
-                            if (data.startsWith('[DONE]:')) {
-                                const conversationId = data.substring(7).trim();
-                                if (conversationId) {
-                                    currentConversationId = conversationId;
-                                    conversationIdDisplay.textContent = conversationId.substring(0, 8) + '...';
-                                    loadConversations();
-                                }
-                                continue;
-                            }
-                            if (data === '[DONE]') {
-                                continue;
-                            }
-                            // 检查是否是进度通知
-                            if (data.startsWith('[PROGRESS]:')) {
-                                const progressMsg = data.substring(11).trim();
-                                updateProgressStatus(aiMessageElement, progressMsg);
-                                continue;
-                            }
-                            // 检查是否是引用资料
-                            if (data.startsWith('[REFERENCE]:')) {
-                                const refJson = data.substring(12).trim();
-                                try {
-                                    const refs = JSON.parse(refJson);
-                                    aiMessageElement.references = refs;
-                                    renderReferences(aiMessageElement, refs);
-                                } catch (e) {
-                                    console.error('解析引用数据失败:', e);
-                                }
-                                continue;
-                            }
-                            // 检查是否是警告消息
-                            if (data.startsWith('[WARN]:')) {
-                                const warnMsg = data.substring(7).trim();
-                                renderWarnMessage(aiMessageElement, warnMsg);
-                                hasSpecialContent = true;
-                                continue;
-                            }
-                            // 检查是否是卡片提示
-                            if (data.startsWith('[CARD]:')) {
-                                const cardPrompt = data.substring(7).trim();
-                                renderCardPrompt(aiMessageElement, cardPrompt);
-                                hasSpecialContent = true;
-                                continue;
-                            }
-                            // 检查是否是我的车辆选择卡片
-                            if (data.startsWith('[CARD_CHOICE_MYCAR]:')) {
-                                const json = data.substring(20).trim();
-                                try {
-                                    const cars = JSON.parse(json);
-                                    renderMyCarChoices(aiMessageElement, cars);
-                                    hasSpecialContent = true;
-                                } catch (e) {
-                                    console.error('解析我的车辆数据失败:', e);
-                                }
-                                continue;
-                            }
-                            // 检查是否是车型选择卡片
-                            if (data.startsWith('[CARD_CHOICE_CAR]:')) {
-                                const json = data.substring(18).trim();
-                                try {
-                                    const cars = JSON.parse(json);
-                                    renderCarInfoChoices(aiMessageElement, cars);
-                                    hasSpecialContent = true;
-                                } catch (e) {
-                                    console.error('解析车型数据失败:', e);
-                                }
-                                continue;
-                            }
-                            // 累积内容（收到实际内容后，将最后一个进度标记为已完成）
-                            if (fullContent === '') {
-                                markAllProgressDone(aiMessageElement);
-                            }
-                            fullContent += data;
-                            updateMessageContent(aiMessageElement, fullContent);
-                        } else if (line.trim() && !line.startsWith(':')) {
-                            // 直接返回的内容（非SSE格式），识别 [DONE]:conversationId
-                            const trimmedLine = line.trim();
-                            if (trimmedLine.startsWith('[DONE]:')) {
-                                const conversationId = trimmedLine.substring(7).trim();
-                                if (conversationId) {
-                                    currentConversationId = conversationId;
-                                    conversationIdDisplay.textContent = conversationId.substring(0, 8) + '...';
-                                    loadConversations();
-                                }
-                            }
-                        }
+                    // SSE 事件以空行（\n\n 或 \r\n\r\n）为分隔
+                    const eventSep = /\r?\n\r?\n/g;
+                    let m;
+                    let lastIndex = 0;
+                    while ((m = eventSep.exec(buffer)) !== null) {
+                        const eventBlock = buffer.substring(lastIndex, m.index);
+                        lastIndex = m.index + m[0].length;
+                        processEvent(eventBlock);
                     }
+                    buffer = buffer.substring(lastIndex);
+                }
+
+                // 收尾：缓冲区里若仍有未以空行结束的事件，作为最后一个事件处理
+                if (buffer.trim()) {
+                    processEvent(buffer);
+                    buffer = '';
                 }
 
                 // 如果没有收到流式内容，也没有渲染过特殊内容（WARN/CARD），显示提示
@@ -872,10 +1049,14 @@
         function appendMessage(type, content, showTyping = false) {
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${type}`;
+            // AI 消息按 Markdown 渲染，用户消息保持转义
+            const bodyHtml = type === 'user'
+                ? escapeHtml(content)
+                : `<div class="markdown-body">${renderMarkdown(content)}</div>`;
             messageDiv.innerHTML = `
                 <div class="message-avatar">${type === 'user' ? '👤' : '🤖'}</div>
                 <div class="message-content">
-                    <div class="message-text">${escapeHtml(content)}${showTyping ? '<div class="typing-indicator"><span></span><span></span><span></span></div>' : ''}</div>
+                    <div class="message-text">${bodyHtml}${showTyping ? '<div class="typing-indicator"><span></span><span></span><span></span></div>' : ''}</div>
                     <div class="message-time">${new Date().toLocaleTimeString()}</div>
                 </div>
             `;
@@ -890,7 +1071,13 @@
             if (textElement) {
                 // 保留打字指示器
                 const typingIndicator = textElement.querySelector('.typing-indicator');
-                textElement.innerHTML = escapeHtml(content);
+                const isAssistant = messageElement.classList.contains('assistant');
+                if (isAssistant) {
+                    // 流式过程中也按 Markdown 渲染（图片、代码块、表格等增量也能正确呈现）
+                    textElement.innerHTML = `<div class="markdown-body">${renderMarkdown(content)}</div>`;
+                } else {
+                    textElement.innerHTML = escapeHtml(content);
+                }
                 if (typingIndicator) {
                     textElement.appendChild(typingIndicator);
                 }
