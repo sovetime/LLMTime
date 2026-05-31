@@ -15,7 +15,7 @@ public class DocumentSplitterFactory {
     public static DocumentSplitter getInstance(DocumentSplitParam documentSplitParam) {
         // 按标题层级分段
         if (SplitType.TITLE.name().equals(documentSplitParam.splitType())) {
-            return new MarkdownHeaderParentTextSplitter(documentSplitParam.chunkSize(), documentSplitParam.overlap());
+            return new MarkdownHeaderParentTextSplitter(documentSplitParam.titleLevel(), false, false, documentSplitParam.chunkSize(), documentSplitParam.overlap());
         }
 
         // 按固定长度分段

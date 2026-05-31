@@ -253,7 +253,7 @@ public class DocumentProcessServiceImpl implements DocumentProcessService {
 
         // 首次加载第 1 页，每页 100 条；后续循环通过 page.hasNext() 判断是否继续翻页
         Page<KnowledgeSegment> page = knowledgeSegmentService.page(new Page<>(1, 100), queryWrapper);
-        while (page.getCurrent() == 1 || page.hasNext()) {
+        while (page.hasNext()) {
             List<KnowledgeSegment> textSegmentsToEmbed = page.getRecords();
             List<TextSegment> textSegments = textSegmentsToEmbed.stream()
                     .map(segment -> TextSegment.from(segment.getText(), Metadata.from(segment.getMetadataMap())))
@@ -277,7 +277,7 @@ public class DocumentProcessServiceImpl implements DocumentProcessService {
             }
 
             // 继续扫描下一页
-            page = knowledgeSegmentService.page(new Page<>(page.getCurrent() + 1, 100), queryWrapper);
+            page = knowledgeSegmentService.page(new Page<>(page.getCurrent(), 100), queryWrapper);
         }
 
         // 二次校验是否所有分段都已向量化成功

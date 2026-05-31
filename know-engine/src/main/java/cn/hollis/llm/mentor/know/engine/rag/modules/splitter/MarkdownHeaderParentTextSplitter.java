@@ -74,6 +74,39 @@ public class MarkdownHeaderParentTextSplitter implements DocumentSplitter {
     }
 
     /**
+     * 构造函数（通过标题级别指定分割层级）
+     *
+     * @param titleLevel     标题级别（1-6），表示按1到titleLevel级标题进行分割
+     * @param returnEachLine 是否按行返回结果，false时会聚合相同元数据的行
+     * @param stripHeaders   是否在结果中移除标题行
+     * @param chunkSize      每个分片的最大字符数，超出则按chunkSize再次切割，0表示不限制
+     * @param overlap        相邻分片之间的重叠字符数
+     */
+    public MarkdownHeaderParentTextSplitter(int titleLevel, boolean returnEachLine, boolean stripHeaders, int chunkSize, int overlap) {
+        this(buildHeadersMap(titleLevel), returnEachLine, stripHeaders, chunkSize, overlap);
+    }
+
+    /**
+     * 根据标题级别生成标题分割映射表
+     *
+     * @param titleLevel 标题级别（1-6）
+     * @return 标题分割映射表
+     */
+    private static Map<String, String> buildHeadersMap(int titleLevel) {
+        if (titleLevel < 1 || titleLevel > 6) {
+            throw new IllegalArgumentException("titleLevel must be between 1 and 6, but got: " + titleLevel);
+        }
+        String[] names = {"title", "subtitle", "subsubtitle", "subsubsubtitle", "subsubsubsubtitle", "subsubsubsubsubtitle"};
+        Map<String, String> headers = new LinkedHashMap<>();
+        for (int i = 1; i <= titleLevel; i++) {
+            String key = "#".repeat(i);
+            headers.put(key, names[i - 1]);
+        }
+        return headers;
+    }
+
+
+    /**
      * 构造函数（支持 chunkSize 和 overlap）
      *
      * @param headersToSplitOn 标题分割映射表，key为标题标记（如"#"、"##"），value为元数据中的键名

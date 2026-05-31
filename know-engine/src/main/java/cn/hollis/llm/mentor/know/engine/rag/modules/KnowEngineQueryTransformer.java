@@ -167,10 +167,8 @@ public class KnowEngineQueryTransformer implements QueryTransformer {
         List<ChatMessage> chatMemory = query.metadata().chatMemory();
 
         Stopwatch stopwatch = Stopwatch.createStarted();
-        String response = chatModel.chat(createPrompt(query, format(chatMemory)).text());
-        log.info("问题改写完成, 改写结果 : {} ,耗时: {}", response, stopwatch.stop().elapsed(TimeUnit.MILLISECONDS));
-
-        String newQuery = "我的问题是：" + response + ", 我的用户Id是: 123321" + ", 现在是：" + LocalDateTime.now();
+        String newQuery = chatModel.chat(createPrompt(query, format(chatMemory)).text());
+        log.info("问题改写完成, 改写结果 : {} ,耗时: {}", newQuery, stopwatch.stop().elapsed(TimeUnit.MILLISECONDS));
 
         Query compressedQuery = query.metadata() == null
                 ? Query.from(newQuery)
@@ -184,7 +182,7 @@ public class KnowEngineQueryTransformer implements QueryTransformer {
                 Thread.ofVirtual().name("query-transform-" + chatMessageId).start(() -> {
                     try {
                         chatMessageService.updateTransformContent(chatMessageId, newQuery);
-                        log.info("改写结果已回写: assistantMsgId={}, transformContent={}", chatMessageId, response);
+                        log.info("改写结果已回写: assistantMsgId={}, transformContent={}", chatMessageId, newQuery);
                     } catch (Exception e) {
                         log.warn("改写结果回写失败: assistantMsgId={}", chatMessageId, e);
                     }

@@ -18,6 +18,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 import static cn.hollis.llm.mentor.know.engine.rag.constant.MetadataKeyConstant.BROTHER_CHUNK_ID;
 import static cn.hollis.llm.mentor.know.engine.rag.constant.MetadataKeyConstant.PARENT_CHUNK_ID;
@@ -103,18 +104,6 @@ public class KnowEngineElasticsearchContentRetriever extends AbstractElasticsear
      */
     @Override
     public List<Content> retrieve(final Query query) {
-        // 全文检索模式：直接执行全文搜索并返回结果
-        if (configuration instanceof ElasticsearchConfigurationFullText) {
-            log.debug("Using a full text search query");
-            return this.fullTextSearch(query.text()).stream()
-                    .map(t -> Content.from(
-                            t,
-                            Map.of(
-                                    ContentMetadata.SCORE, t.metadata().getDouble(ContentMetadata.SCORE.name()),
-                                    ContentMetadata.EMBEDDING_ID,
-                                    t.metadata().getString(ContentMetadata.EMBEDDING_ID.name()))))
-                    .toList();
-        }
         // 将查询文本转换为向量
         Embedding referenceEmbedding = embeddingModel.embed(query.text()).content();
         // 构建向量搜索请求，设置查询向量、最大返回数量、最低相似度分数和过滤条件
@@ -125,13 +114,25 @@ public class KnowEngineElasticsearchContentRetriever extends AbstractElasticsear
                 .filter(filter)
                 .build();
 
-        // 混合检索模式：结合向量检索和全文检索
-        if (configuration instanceof ElasticsearchConfigurationHybrid) {
-            return mapResultsToContentList(this.hybridSearch(request, query.text()));
+        List<Content> searchContents;
+        // 全文检索模式：直接执行全文搜索并返回结果
+        if (configuration instanceof ElasticsearchConfigurationFullText) {
+            log.debug("Using a full text search query");
+            searchContents = this.fullTextSearch(query.text()).stream()
+                    .map(t -> Content.from(
+                            t,
+                            Map.of(
+                                    ContentMetadata.SCORE, t.metadata().getDouble(ContentMetadata.SCORE.name()),
+                                    ContentMetadata.EMBEDDING_ID,
+                                    t.metadata().getString(ContentMetadata.EMBEDDING_ID.name()))))
+                    .toList();
+        } else if (configuration instanceof ElasticsearchConfigurationHybrid) {
+            // 混合检索模式：结合向量检索和全文检索
+            searchContents = mapResultsToContentList(this.hybridSearch(request, query.text()));
+        } else {
+            searchContents = mapResultsToContentList(this.search(request));
         }
 
-        // 向量检索模式（默认）：执行 KNN 向量相似度搜索
-        List<Content> searchContents = mapResultsToContentList(this.search(request));
         // 去重并按文本内容排序
         searchContents = searchContents.stream().distinct().sorted(Comparator.comparing(content -> content.textSegment().text())).toList();
         List<Content> finalContents = new ArrayList<>(searchContents);
@@ -188,6 +189,14 @@ public class KnowEngineElasticsearchContentRetriever extends AbstractElasticsear
                 }
             }
         }
+
+        finalContents = finalContents.stream().sorted(new Comparator<Content>() {
+            @Override
+            public int compare(Content content1, Content content2) {
+                return Double.compare((double) content2.metadata().get(ContentMetadata.SCORE), (double) content1.metadata().get(ContentMetadata.SCORE));
+            }
+        }).collect(Collectors.toList());
+
         return finalContents;
     }
 

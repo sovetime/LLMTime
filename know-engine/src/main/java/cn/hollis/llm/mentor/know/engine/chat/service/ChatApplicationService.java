@@ -180,9 +180,11 @@ public class ChatApplicationService {
                             .build(), processCallback);
 
                     // 全文检索器配置，基于 Elasticsearch 全文匹配的关键词检索
-                    ProgressAwareContentRetriever fullTextRetriever = new ProgressAwareContentRetriever(ElasticsearchContentRetriever.builder()
+                    ProgressAwareContentRetriever fullTextRetriever = new ProgressAwareContentRetriever(KnowEngineElasticsearchContentRetriever.builder()
                             .configuration(ElasticsearchConfigurationFullText.builder().build())
                             .restClient(restClient)
+                            .embeddingModel(openAiEmbeddingModel)
+                            .knowledgeSegmentService(knowledgeSegmentService)
                             .indexName(INDEX_NAME)
                             .maxResults(5)
                             .build(), processCallback);
@@ -218,7 +220,7 @@ public class ChatApplicationService {
                     // 内容聚合器：合并各检索器结果，经重排序后取 Top-N 作为 LLM 上下文
                     // 同时负责在"正在生成回答"阶段向 sink 推送进度消息
                     ContentAggregator contentAggregator = new ProgressAwareContentAggregator(
-                            ReRankingContentAggregator.builder()
+                            KnowEngineReRankingContentAggregator.builder()
                                     .scoringModel(scoringModel)
                                     .maxResults(5)
                                     .querySelector(queryToContents -> queryToContents.keySet().iterator().next())

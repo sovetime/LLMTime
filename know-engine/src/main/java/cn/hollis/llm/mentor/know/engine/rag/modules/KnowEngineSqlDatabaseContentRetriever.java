@@ -9,6 +9,7 @@ import dev.langchain4j.rag.query.Query;
 import lombok.extern.slf4j.Slf4j;
 
 import javax.sql.DataSource;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -41,6 +42,8 @@ public class KnowEngineSqlDatabaseContentRetriever implements ContentRetriever {
     public List<Content> retrieve(Query query) {
         List<Content> results;
         try {
+            String newQuery = "我的问题是：" + query.text() + ", 我的用户Id是: 123321" + ", 现在是：" + LocalDateTime.now();
+            query = new Query(newQuery, query.metadata());
             results = sqlDatabaseContentRetriever.retrieve(query);
         } catch (Exception e) {
             log.warn("SQL 检索异常，降级使用知识库检索, query: {}", query.text(), e);
